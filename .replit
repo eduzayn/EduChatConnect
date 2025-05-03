@@ -6,3 +6,4 @@ externalPort = 80
 
 [deployment]
 run = ["sh", "-c", "node index.js"]
+build = ["sh", "-c", "npx tsc --project tsconfig.node.json"]
