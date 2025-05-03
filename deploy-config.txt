@@ -1,0 +1,75 @@
+# Configuração de Deploy para EduChatConnect
+
+Este arquivo contém as instruções para configurar corretamente o deploy do projeto no Replit.
+
+## Erros identificados:
+1. Missing deployment configuration in .replit file
+2. Run command is not properly configured
+3. Port configuration in .replit file is incomplete
+
+## Configuração recomendada para .replit:
+
+```
+modules = ["nodejs-20"]
+entrypoint = "server/index.ts"
+
+hidden = [".config", "package-lock.json", "tsconfig.tsbuildinfo"]
+
+[nix]
+channel = "stable-23_11"
+
+[deployment]
+run = ["npm", "run", "dev"]
+deploymentTarget = "cloudrun"
+ignorePorts = false
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+description = "Application web server"
+protocol = "http"
+
+[env]
+NODE_ENV = "development"
+
+[languages]
+[languages.typescript]
+pattern = "**/{*.ts,*.tsx}"
+[languages.typescript.languageServer]
+start = ["typescript-language-server", "--stdio"]
+
+[packager]
+language = "nodejs-npm"
+
+[packager.features]
+enabledForHosting = true
+packageSearch = true
+guessImports = true
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix", "package.json"]
+```
+
+## Como aplicar a configuração:
+
+1. No painel de controle do Replit, clique na opção "Secrets"
+2. Adicione o botão "+" no canto inferior direito
+3. Configure seu arquivo .replit usando essa configuração
+4. Depois, tente o deploy novamente
+
+## Configuração do servidor:
+
+Para garantir que o servidor esteja configurado corretamente para deploy, certifique-se de:
+
+1. O servidor está ouvindo na porta 3000
+2. O servidor está vinculado a 0.0.0.0 (não localhost)
+3. Há um script "dev" no package.json que inicia corretamente o servidor
+
+## Configuração do servidor em server/index.ts:
+
+```typescript
+// Garantir que o servidor esteja ouvindo em 0.0.0.0 (não localhost)
+app.listen(3000, '0.0.0.0', () => {
+  console.log('Server running on http://0.0.0.0:3000');
+});
+```

@@ -1,0 +1,24 @@
+{
+  "name": "educhatconnect",
+  "entrypoint": "index.js",
+  "run": "node index.js",
+  "environment": {
+    "NODE_ENV": "production"
+  },
+  "ports": {
+    "3000": "HTTP"
+  },
+  "build": {
+    "commands": [
+      "node server-build.js"
+    ]
+  },
+  "deploymentInstructions": [
+    "Para configurar o deploy no Replit:",
+    "1. Acesse o painel de controle do Replit (Secrets)",
+    "2. Adicione um segredo com chave REPLIT_DEPLOYMENT e valor '{\"run\":\"node index.js\"}'",
+    "3. Certifique-se de que o arquivo index.js na raiz do projeto executa o servidor",
+    "4. O servidor deve ouvir em 0.0.0.0:3000"
+  ],
+  "_comment": "Este arquivo é apenas para referência. Você precisará configurar o deploy manualmente no Replit."
+}

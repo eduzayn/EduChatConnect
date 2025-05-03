@@ -106,10 +106,10 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
-// Inicia o servidor na porta especificada
-const server = app.listen(PORT, () => {
+// Inicia o servidor na porta especificada (0.0.0.0 para permitir acesso externo)
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor EduChatConnect em execução na porta ${PORT}`);
-  console.log(`http://localhost:${PORT}`);
+  console.log(`http://0.0.0.0:${PORT}`);
 });
 
 // Tratamento de erros não capturados
