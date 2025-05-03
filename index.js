@@ -1,59 +1,57 @@
 
-// Deployment entry point for EduChatConnect
-console.log('Starting EduChatConnect server...');
-
-// Determine environment
-const isProduction = process.env.NODE_ENV === 'production';
-console.log(`Environment: ${isProduction ? 'production' : 'development'}`);
-
-// Import path for file checking
+// Arquivo index.js atualizado para suportar ES modules
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Check for compiled files
+// Verificar ambiente
+const isProduction = process.env.NODE_ENV === 'production';
+console.log('Starting EduChatConnect server...');
+console.log(`Environment: ${isProduction ? 'production' : 'development'}`);
+
+// Caminhos para verificar
 const distServerPath = path.join(__dirname, 'dist', 'server', 'index.js');
-const hasCompiledFiles = fs.existsSync(distServerPath);
 
-if (isProduction && hasCompiledFiles) {
-  // Use ESM for imports in production with compiled files
-  import('./dist/server/index.js')
-    .then(() => {
-      console.log('Server successfully started from compiled files');
-    })
-    .catch((err) => {
-      console.error('Failed to start server from compiled files:', err);
-      fallbackToTsNode();
-    });
-} else {
-  // Use TS-Node in development
-  fallbackToTsNode();
-}
-
-function fallbackToTsNode() {
-  console.log('Attempting to start server using typescript directly...');
-  
+// Função principal para iniciar o servidor
+const startServer = async () => {
   try {
-    // Use dynamic import for compatibility
-    import('child_process').then(({ spawn }) => {
-      const tsNodeProcess = spawn('npx', ['tsx', 'server/index.ts'], {
-        stdio: 'inherit',
-        shell: true
-      });
+    // Primeiro método: tentar usar o código compilado em produção
+    if (isProduction && fs.existsSync(distServerPath)) {
+      console.log('Starting server from compiled files...');
       
-      tsNodeProcess.on('error', (error) => {
-        console.error('Error starting tsx process:', error);
-      });
-      
-      process.on('SIGINT', () => {
-        tsNodeProcess.kill('SIGINT');
-        process.exit(0);
-      });
+      // Carregar o servidor compilado via ES modules
+      const { default: startCompiledServer } = await import(distServerPath);
+      if (typeof startCompiledServer === 'function') {
+        startCompiledServer();
+        return;
+      }
+    }
+    
+    // Segundo método: tentar usar TypeScript diretamente (desenvolvimento ou fallback)
+    console.log('Attempting to start server using typescript directly...');
+    
+    const tsNodeProcess = spawn('npx', ['tsx', 'server/index.ts'], {
+      stdio: 'inherit',
+      shell: true
+    });
+    
+    tsNodeProcess.on('error', (error) => {
+      console.error('Error starting tsx process:', error);
+    });
+    
+    process.on('SIGINT', () => {
+      tsNodeProcess.kill('SIGINT');
+      process.exit(0);
     });
   } catch (fallbackErr) {
-    console.error('Fallback server start failed:', fallbackErr);
+    console.error('Server start failed:', fallbackErr);
+    process.exit(1);
   }
-}
+};
+
+// Iniciar o servidor
+startServer();
