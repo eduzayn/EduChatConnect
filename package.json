@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "node build.js",
+    "vercel-build": "vite build",
     "start": "NODE_ENV=production node index.js",
     "deploy:build": "npx tsc --project tsconfig.node.json",
     "check": "tsc",
