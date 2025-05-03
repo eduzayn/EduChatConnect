@@ -1,4 +1,3 @@
-
 // Deployment build script (ES Modules compatible)
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -18,29 +17,25 @@ try {
     console.log('✓ Created dist directory');
   }
 
-  // Instalar TypeScript globalmente para garantir acesso ao binário tsc
-  console.log('Instalando TypeScript...');
-  execSync('npm install -g typescript', { stdio: 'inherit' });
-  
-  // Verificar se tsc está acessível
-  try {
-    execSync('tsc --version', { stdio: 'inherit' });
-    console.log('TypeScript está instalado e funcionando');
-  } catch (e) {
-    console.log('Usando método alternativo para acessar TypeScript...');
-    // Instalar localmente também como fallback
-    execSync('npm install --save-dev typescript', { stdio: 'inherit' });
-  }
+  // Compile TypeScript using npx for reliability
+  console.log('Compiling TypeScript...');
+  execSync('npx tsc --project tsconfig.node.json', { stdio: 'inherit' });
 
-  // Compilar TypeScript usando o caminho mais seguro
-  console.log('Compilando TypeScript...');
-  try {
-    // Tentar usar npx com caminho explícito
-    execSync('npx tsc --project ./tsconfig.node.json', { stdio: 'inherit' });
-  } catch (error) {
-    console.log('Tentando método alternativo de compilação...');
-    // Método alternativo usando o binário local
-    execSync('node ./node_modules/typescript/bin/tsc --project ./tsconfig.node.json', { stdio: 'inherit' });
+  // Copy necessary files
+  console.log('Copying static files...');
+  if (fs.existsSync('public')) {
+    if (!fs.existsSync('dist/public')) {
+      fs.mkdirSync('dist/public', { recursive: true });
+    }
+
+    // Copy files from public to dist/public
+    const publicFiles = fs.readdirSync('public');
+    for (const file of publicFiles) {
+      const srcPath = path.join('public', file);
+      const destPath = path.join('dist/public', file);
+      fs.copyFileSync(srcPath, destPath);
+    }
+    console.log('✓ Copied public files');
   }
 
   // Create a basic HTML file if needed
