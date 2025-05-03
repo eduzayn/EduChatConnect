@@ -101,9 +101,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// Health check endpoint for deployments
+app.get('/', (req, res) => {
+  res.status(200).send('Health check OK');
+});
+
 // Qualquer outra rota redireciona para o index.html
 app.get('*', (req, res) => {
-  res.sendFile(path.join(publicDir, 'index.html'));
+  if (req.path !== '/') {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  }
 });
 
 // Inicia o servidor na porta especificada (0.0.0.0 para permitir acesso externo)
