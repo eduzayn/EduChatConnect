@@ -1,0 +1,20 @@
+# Este é um arquivo de configuração para o deploy no Replit
+# Não modifique este arquivo diretamente
+
+run = "node index.js"
+language = "node"
+
+[env]
+NODE_ENV = "production"
+
+[nix]
+channel = "stable-23_11"
+
+[deployment]
+run = ["node", "index.js"]
+deploymentTarget = "cloudrun"
+ignorePorts = false
+
+[[ports]]
+localPort = 3000
+externalPort = 80

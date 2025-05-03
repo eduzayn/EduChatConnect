@@ -1,0 +1,16 @@
+{
+  "name": "educhatconnect-deploy",
+  "version": "1.0.0",
+  "description": "Configuração de deploy para EduChatConnect no Replit",
+  "main": "deploy-replit.js",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "start": "node deploy-replit.js",
+    "deploy": "node deploy-replit.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

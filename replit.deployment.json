@@ -1,0 +1,12 @@
+{
+  "run": "node index.js",
+  "deploymentTarget": "cloudrun",
+  "ignorePorts": false,
+  "entrypoint": "index.js",
+  "environment": {
+    "NODE_ENV": "production"
+  },
+  "ports": {
+    "3000": "HTTP"
+  }
+}

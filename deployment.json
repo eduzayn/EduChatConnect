@@ -1,0 +1,19 @@
+{
+  "name": "EduChatConnect",
+  "run": "node index.js",
+  "entrypoint": "index.js",
+  "environment": {
+    "NODE_ENV": "production"
+  },
+  "deployment": {
+    "run": ["node", "index.js"],
+    "deploymentTarget": "cloudrun",
+    "ignorePorts": false
+  },
+  "ports": [
+    {
+      "port": 3000,
+      "protocol": "http"
+    }
+  ]
+}

@@ -5,10 +5,15 @@
  * Suporta tanto ambiente de desenvolvimento quanto produção.
  */
 
+// Definir explicitamente NODE_ENV como produção para deploy
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
+
 // Verificar o ambiente Node.js
 console.log('Iniciando EduChatConnect...');
 console.log(`Node.js versão: ${process.version}`);
-console.log(`Ambiente: ${process.env.NODE_ENV || 'não definido'}`);
+console.log(`Ambiente: ${process.env.NODE_ENV}`);
 
 // Definir caminho do servidor baseado no ambiente
 let serverPath;
