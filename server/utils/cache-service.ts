@@ -1,266 +1,266 @@
 /**
- * Serviço de cache em memória para a aplicação
+ * Serviço de cache para a aplicação
  * 
- * Este serviço fornece um mecanismo simples de cache em memória
- * com suporte a namespaces, expiração e monitoramento.
+ * Este arquivo fornece um serviço de cache para armazenar dados em memória
+ * que são frequentemente acessados, reduzindo a carga no banco de dados.
  */
 
-import createLogger from './logger';
+import { log } from './logger';
 
-const logger = createLogger('cache-service');
-
-interface CacheItem {
-  key: string;
-  value: any;
-  expires: number | null; // Timestamp de expiração ou null para não expirar
-  namespace: string;
-}
-
-interface CacheStats {
+// Tipo para estatísticas do cache
+export interface CacheStats {
   hits: number;
   misses: number;
-  size: number;
-  itemCount: number;
-  namespaces: Record<string, number>; // Contagem de itens por namespace
+  keys: number;
+  size: number; // em bytes (aproximado)
+  created: Date;
+  lastClear: Date | null;
 }
 
-class CacheService {
-  private cache: Map<string, CacheItem> = new Map();
-  private stats: CacheStats = {
-    hits: 0,
-    misses: 0,
-    size: 0,
-    itemCount: 0,
-    namespaces: {}
-  };
-
-  // Intervalo de limpeza de itens expirados (em milissegundos)
-  private readonly cleanupInterval = 60 * 1000; // 1 minuto
-
-  constructor() {
-    // Configurar limpeza periódica de itens expirados
-    setInterval(() => this.cleanup(), this.cleanupInterval);
-    logger.info('Serviço de cache inicializado');
-  }
-
+/**
+ * Implementação básica de cache em memória
+ */
+class MemoryCache {
+  private cache: Map<string, any>;
+  private ttls: Map<string, number>;
+  private stats: CacheStats;
+  private maxSize: number; // tamanho máximo em bytes (aproximado)
+  
   /**
-   * Obtém um item do cache
-   * @param key Chave do item
-   * @returns Valor associado à chave ou undefined se não encontrado
+   * Cria uma nova instância do cache
+   * @param maxSize Tamanho máximo do cache em bytes (aproximado)
+   */
+  constructor(maxSize: number = 50 * 1024 * 1024) { // 50MB por padrão
+    this.cache = new Map<string, any>();
+    this.ttls = new Map<string, number>();
+    this.maxSize = maxSize;
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      keys: 0,
+      size: 0,
+      created: new Date(),
+      lastClear: null
+    };
+    
+    // Iniciar limpeza automática de itens expirados
+    setInterval(() => this.cleanExpired(), 60000); // A cada minuto
+    
+    log('Serviço de cache inicializado', 'cache');
+  }
+  
+  /**
+   * Obtém um valor do cache
+   * @param key Chave para busca
+   * @returns O valor se encontrado, ou undefined
    */
   get<T>(key: string): T | undefined {
-    // Verificar se o item existe e não expirou
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      this.stats.misses++;
-      return undefined;
-    }
-    
-    // Verificar se o item expirou
-    if (item.expires !== null && item.expires < Date.now()) {
-      this.stats.misses++;
-      this.remove(key);
-      return undefined;
-    }
-    
-    // Item encontrado e válido
-    this.stats.hits++;
-    return item.value as T;
-  }
-
-  /**
-   * Armazena um item no cache
-   * @param key Chave do item
-   * @param value Valor a ser armazenado
-   * @param ttl Tempo de vida em segundos (opcional)
-   * @param namespace Namespace para organização (opcional)
-   */
-  set<T>(key: string, value: T, ttl: number | null = null, namespace = 'default'): void {
-    // Remover item existente se presente
+    // Verificar se a chave existe e não expirou
     if (this.cache.has(key)) {
-      this.remove(key);
+      const ttl = this.ttls.get(key);
+      
+      // Se tiver TTL e estiver expirado, remover
+      if (ttl !== undefined && ttl < Date.now()) {
+        this.delete(key);
+        this.stats.misses++;
+        return undefined;
+      }
+      
+      this.stats.hits++;
+      return this.cache.get(key) as T;
     }
     
-    // Calcular timestamp de expiração
-    const expires = ttl !== null ? Date.now() + (ttl * 1000) : null;
-    
-    // Armazenar no cache
-    this.cache.set(key, {
-      key,
-      value,
-      expires,
-      namespace
-    });
-    
-    // Atualizar estatísticas
-    this.stats.itemCount++;
-    this.stats.size += this.estimateSize(value);
-    this.stats.namespaces[namespace] = (this.stats.namespaces[namespace] || 0) + 1;
-    
-    logger.debug(`Cache: item "${key}" adicionado (namespace: ${namespace}, ttl: ${ttl}s)`);
+    this.stats.misses++;
+    return undefined;
   }
-
+  
+  /**
+   * Armazena um valor no cache
+   * @param key Chave para armazenamento
+   * @param value Valor a ser armazenado
+   * @param ttl Tempo de vida em ms (opcional)
+   * @returns true se armazenado com sucesso
+   */
+  set<T>(key: string, value: T, ttl?: number): boolean {
+    try {
+      // Verificar tamanho aproximado do item
+      const itemSize = this.estimateSize(key, value);
+      
+      // Se cache ficará muito grande, limpar alguns itens
+      if (this.stats.size + itemSize > this.maxSize) {
+        this.evictOldest(Math.max(itemSize, this.maxSize * 0.1)); // Remover pelo menos 10%
+      }
+      
+      // Armazenar o valor e TTL (se especificado)
+      this.cache.set(key, value);
+      
+      if (ttl !== undefined && ttl > 0) {
+        this.ttls.set(key, Date.now() + ttl);
+      } else {
+        this.ttls.delete(key); // Sem TTL (não expira)
+      }
+      
+      // Atualizar estatísticas
+      if (!this.cache.has(key)) {
+        this.stats.keys++;
+      }
+      this.stats.size += itemSize;
+      
+      return true;
+    } catch (error) {
+      log(`Erro ao armazenar em cache: ${error}`, 'cache', 'error');
+      return false;
+    }
+  }
+  
   /**
    * Remove um item do cache
-   * @param key Chave do item a ser removido
-   * @returns true se o item foi removido, false se não existia
+   * @param key Chave a ser removida
+   * @returns true se o item existia e foi removido
    */
-  remove(key: string): boolean {
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      return false;
+  delete(key: string): boolean {
+    if (this.cache.has(key)) {
+      // Estimar tamanho do item a ser removido
+      const itemSize = this.estimateSize(key, this.cache.get(key));
+      
+      // Remover o item e seu TTL
+      this.cache.delete(key);
+      this.ttls.delete(key);
+      
+      // Atualizar estatísticas
+      this.stats.keys--;
+      this.stats.size -= itemSize;
+      
+      return true;
     }
-    
-    // Atualizar estatísticas
-    this.stats.itemCount--;
-    this.stats.size -= this.estimateSize(item.value);
-    this.stats.namespaces[item.namespace]--;
-    
-    // Se o namespace ficar vazio, remover da contagem
-    if (this.stats.namespaces[item.namespace] <= 0) {
-      delete this.stats.namespaces[item.namespace];
-    }
-    
-    // Remover do cache
-    this.cache.delete(key);
-    
-    logger.debug(`Cache: item "${key}" removido (namespace: ${item.namespace})`);
-    return true;
+    return false;
   }
-
+  
   /**
-   * Verifica se um item existe no cache e não expirou
-   * @param key Chave a verificar
-   * @returns true se o item existe e é válido
+   * Limpa todo o cache
    */
-  has(key: string): boolean {
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      return false;
-    }
-    
-    // Verificar se expirou
-    if (item.expires !== null && item.expires < Date.now()) {
-      this.remove(key);
-      return false;
-    }
-    
-    return true;
-  }
-
-  /**
-   * Limpa todos os itens do cache
-   */
-  flush(): void {
+  clear(): void {
     this.cache.clear();
+    this.ttls.clear();
     
-    // Reiniciar estatísticas
-    this.stats.itemCount = 0;
+    // Resetar estatísticas
+    this.stats.keys = 0;
     this.stats.size = 0;
-    this.stats.namespaces = {};
+    this.stats.lastClear = new Date();
     
-    logger.info('Cache: todos os itens foram limpos');
+    log('Cache limpo completamente', 'cache');
   }
-
+  
   /**
-   * Limpa todos os itens de um namespace específico
-   * @param namespace Nome do namespace
-   * @returns Número de itens removidos
-   */
-  clearNamespace(namespace: string): number {
-    let count = 0;
-    
-    // Identificar todas as chaves no namespace
-    const keysToRemove: string[] = [];
-    
-    this.cache.forEach((item) => {
-      if (item.namespace === namespace) {
-        keysToRemove.push(item.key);
-      }
-    });
-    
-    // Remover cada item
-    keysToRemove.forEach(key => {
-      if (this.remove(key)) {
-        count++;
-      }
-    });
-    
-    logger.info(`Cache: namespace "${namespace}" limpo (${count} itens removidos)`);
-    return count;
-  }
-
-  /**
-   * Retorna estatísticas de uso do cache
+   * Obtém as estatísticas do cache
+   * @returns Estatísticas atuais
    */
   getStats(): CacheStats {
     return { ...this.stats };
   }
-
+  
   /**
    * Remove itens expirados do cache
    * @returns Número de itens removidos
    */
-  private cleanup(): number {
+  cleanExpired(): number {
     const now = Date.now();
-    let count = 0;
+    let removed = 0;
     
-    // Identificar itens expirados
-    const keysToRemove: string[] = [];
-    
-    this.cache.forEach((item) => {
-      if (item.expires !== null && item.expires < now) {
-        keysToRemove.push(item.key);
+    // Verificar todos os TTLs
+    for (const [key, expiry] of this.ttls.entries()) {
+      if (expiry < now) {
+        this.delete(key);
+        removed++;
       }
-    });
-    
-    // Remover cada item expirado
-    keysToRemove.forEach(key => {
-      if (this.remove(key)) {
-        count++;
-      }
-    });
-    
-    if (count > 0) {
-      logger.debug(`Cache: limpeza automática removeu ${count} itens expirados`);
     }
     
-    return count;
+    if (removed > 0) {
+      log(`Limpeza de cache: ${removed} itens expirados removidos`, 'cache');
+    }
+    
+    return removed;
   }
-
+  
   /**
-   * Estima o tamanho em bytes de um valor
-   * Esta é uma estimativa simplificada e pode não ser precisa para todos os tipos
+   * Estima o tamanho em bytes de um item de cache
+   * @param key Chave do item
+   * @param value Valor do item
+   * @returns Tamanho aproximado em bytes
    */
-  private estimateSize(value: any): number {
-    if (value === null || value === undefined) {
-      return 0;
-    }
+  private estimateSize(key: string, value: any): number {
+    let size = 0;
     
-    const type = typeof value;
+    // Estimar tamanho da chave (2 bytes por caractere)
+    size += key.length * 2;
     
-    if (type === 'boolean') {
-      return 4;
-    } else if (type === 'number') {
-      return 8;
-    } else if (type === 'string') {
-      return value.length * 2; // Aproximação de 2 bytes por caractere
+    // Estimar tamanho do valor
+    if (typeof value === 'string') {
+      size += value.length * 2;
+    } else if (typeof value === 'number') {
+      size += 8;
+    } else if (typeof value === 'boolean') {
+      size += 4;
+    } else if (value === null || value === undefined) {
+      size += 0;
     } else if (Array.isArray(value)) {
-      return value.reduce((acc, item) => acc + this.estimateSize(item), 0);
-    } else if (type === 'object') {
-      // Para objetos, somamos o tamanho das chaves e valores
-      return Object.entries(value).reduce(
-        (acc, [key, val]) => acc + key.length * 2 + this.estimateSize(val), 
-        0
-      );
+      // Para arrays, estimar tamanho de cada elemento
+      size += 8; // Overhead do array
+      for (const item of value) {
+        size += this.estimateSize('', item);
+      }
+    } else if (typeof value === 'object') {
+      // Para objetos, estimar tamanho de cada propriedade
+      size += 8; // Overhead do objeto
+      for (const prop in value) {
+        if (Object.prototype.hasOwnProperty.call(value, prop)) {
+          size += this.estimateSize(prop, value[prop]);
+        }
+      }
+    } else {
+      // Outros tipos, usar estimativa conservadora
+      size += 32;
     }
     
-    return 0;
+    return size;
+  }
+  
+  /**
+   * Remove os itens mais antigos do cache até liberar o espaço especificado
+   * @param bytesToFree Bytes a liberar
+   * @returns Número de itens removidos
+   */
+  private evictOldest(bytesToFree: number): number {
+    // Ordenar itens por TTL (mais antigos primeiro)
+    // Itens sem TTL são considerados mais recentes
+    const now = Date.now();
+    const entries = Array.from(this.cache.keys()).map(key => {
+      const ttl = this.ttls.get(key) || Number.MAX_SAFE_INTEGER;
+      return { key, ttl, age: ttl === Number.MAX_SAFE_INTEGER ? 0 : now - ttl };
+    });
+    
+    // Ordenar por idade (mais antigos primeiro)
+    entries.sort((a, b) => b.age - a.age);
+    
+    let bytesFreed = 0;
+    let itemsRemoved = 0;
+    
+    // Remover itens até liberar espaço suficiente
+    for (const entry of entries) {
+      if (bytesFreed >= bytesToFree) break;
+      
+      const item = this.cache.get(entry.key);
+      const itemSize = this.estimateSize(entry.key, item);
+      
+      this.delete(entry.key);
+      bytesFreed += itemSize;
+      itemsRemoved++;
+    }
+    
+    log(`Limpeza de cache: ${itemsRemoved} itens removidos para liberar ${bytesFreed} bytes`, 'cache');
+    return itemsRemoved;
   }
 }
 
-// Exporta uma instância única do serviço de cache
-export default new CacheService();
+// Exportar uma instância única do cache para toda a aplicação
+export const cacheService = new MemoryCache();

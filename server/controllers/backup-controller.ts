@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import backupService from '../utils/backup-service';
-import createLogger from '../utils/logger';
-
-const backupLogger = createLogger('backup-controller');
+import { backupService, BackupInfo } from '../utils/backup-service';
+import { log } from '../utils/logger';
 
 /**
  * Controlador para gerenciar backups do sistema
@@ -13,22 +11,11 @@ export default class BackupController {
    */
   static async getBackups(req: Request, res: Response) {
     try {
-      backupLogger.info('Listando backups disponíveis');
-      const backups = backupService.getBackups();
-      
-      res.status(200).json({
-        success: true,
-        count: backups.length,
-        data: backups
-      });
+      const backups = await backupService.getBackups();
+      res.json({ backups });
     } catch (error) {
-      backupLogger.error('Erro ao listar backups', { error });
-      
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao obter lista de backups',
-        message: error.message
-      });
+      log(`Erro ao listar backups: ${error}`, 'controller', 'error');
+      res.status(500).json({ error: 'Erro ao listar backups', message: String(error) });
     }
   }
 
@@ -37,43 +24,23 @@ export default class BackupController {
    */
   static async createBackup(req: Request, res: Response) {
     try {
-      const { type = 'full' } = req.body;
+      const { name, metadata } = req.body;
       
-      // Verifica se o tipo de backup é válido
-      if (type !== 'full' && type !== 'incremental') {
-        return res.status(400).json({
-          success: false,
-          error: 'Tipo de backup inválido',
-          message: 'O tipo de backup deve ser "full" ou "incremental"'
-        });
+      // Validações básicas
+      if (name && typeof name !== 'string') {
+        return res.status(400).json({ error: 'Nome do backup deve ser uma string' });
       }
+
+      // Iniciar backup assíncrono
+      const backup = await backupService.createBackup(name, metadata);
       
-      backupLogger.info(`Iniciando backup manual ${type}`);
-      
-      // Executa o backup de forma assíncrona
-      const backup = await backupService.performManualBackup(type);
-      
-      if (!backup) {
-        return res.status(409).json({
-          success: false,
-          error: 'Backup em andamento',
-          message: 'Um backup já está em execução'
-        });
-      }
-      
-      res.status(202).json({
-        success: true,
-        message: `Backup ${type} iniciado com sucesso`,
-        data: backup
+      res.json({ 
+        message: 'Backup iniciado com sucesso',
+        backup
       });
     } catch (error) {
-      backupLogger.error('Erro ao iniciar backup manual', { error });
-      
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao iniciar backup',
-        message: error.message
-      });
+      log(`Erro ao criar backup: ${error}`, 'controller', 'error');
+      res.status(500).json({ error: 'Erro ao criar backup', message: String(error) });
     }
   }
 
@@ -85,38 +52,26 @@ export default class BackupController {
       const { id } = req.params;
       
       if (!id) {
-        return res.status(400).json({
-          success: false,
-          error: 'ID do backup não fornecido',
-          message: 'É necessário fornecer o ID do backup a ser restaurado'
-        });
+        return res.status(400).json({ error: 'ID do backup é obrigatório' });
       }
+
+      // Verificar se o backup existe
+      const backups = await backupService.getBackups();
+      const backupExists = backups.some((backup: BackupInfo) => backup.id === id);
       
-      backupLogger.info(`Iniciando restauração do backup ${id}`);
-      
-      // Executa a restauração
-      const success = await backupService.restoreBackup(id);
-      
-      if (!success) {
-        return res.status(404).json({
-          success: false,
-          error: 'Backup não encontrado',
-          message: 'O backup solicitado não foi encontrado ou não pode ser restaurado'
-        });
+      if (!backupExists) {
+        return res.status(404).json({ error: 'Backup não encontrado' });
       }
+
+      // Iniciar restauração
+      await backupService.restoreBackup(id);
       
-      res.status(200).json({
-        success: true,
+      res.json({ 
         message: 'Backup restaurado com sucesso'
       });
     } catch (error) {
-      backupLogger.error('Erro ao restaurar backup', { error });
-      
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao restaurar backup',
-        message: error.message
-      });
+      log(`Erro ao restaurar backup: ${error}`, 'controller', 'error');
+      res.status(500).json({ error: 'Erro ao restaurar backup', message: String(error) });
     }
   }
 
@@ -125,37 +80,11 @@ export default class BackupController {
    */
   static async getBackupStatus(req: Request, res: Response) {
     try {
-      backupLogger.info('Verificando status do sistema de backup');
-      
-      const backups = backupService.getBackups();
-      const { needed, type } = backupService.checkBackupNeeded();
-      
-      // Obtém o último backup completo e incremental
-      const lastFullBackup = backups.find(b => b.type === 'full' && b.status === 'completed');
-      const lastIncrementalBackup = backups.find(b => b.type === 'incremental' && b.status === 'completed');
-      
-      // Backup em andamento
-      const runningBackup = backups.find(b => b.status === 'in_progress');
-      
-      res.status(200).json({
-        success: true,
-        data: {
-          totalBackups: backups.length,
-          lastFullBackup,
-          lastIncrementalBackup,
-          runningBackup,
-          backupNeeded: needed,
-          suggestedBackupType: type,
-        }
-      });
+      const status = backupService.getStatus();
+      res.json({ status });
     } catch (error) {
-      backupLogger.error('Erro ao obter status do backup', { error });
-      
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao obter status do backup',
-        message: error.message
-      });
+      log(`Erro ao obter status de backup: ${error}`, 'controller', 'error');
+      res.status(500).json({ error: 'Erro ao obter status de backup', message: String(error) });
     }
   }
 }

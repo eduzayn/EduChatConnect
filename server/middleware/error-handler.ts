@@ -7,9 +7,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import createLogger from '../utils/logger';
-
-const logger = createLogger('error-handler');
+import { log } from '../utils/logger';
 
 /**
  * Interface básica para erros customizados da aplicação
@@ -168,17 +166,7 @@ export function errorHandlerMiddleware(err: any, req: Request, res: Response, ne
   const logLevel = appError.statusCode ?? 500 >= 500 ? 'error' : 'warn';
   
   // Registra o erro
-  logger[logLevel](`[${appError.statusCode ?? 500}] ${appError.message}`, {
-    error: appError,
-    request: {
-      method: req.method,
-      url: req.url,
-      params: req.params,
-      query: req.query,
-      ip: req.ip,
-      headers: req.headers
-    }
-  });
+  log(`[${appError.statusCode ?? 500}] ${appError.message}`, 'error-handler', logLevel);
   
   // Retorna resposta formatada
   res.status(appError.statusCode ?? 500).json(responseBody);

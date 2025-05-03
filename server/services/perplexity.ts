@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { log } from '../../vite';
+import { log } from '../utils/logger';
 
 const API_URL = 'https://api.perplexity.ai/chat/completions';
 const DEFAULT_MODEL = 'llama-3.1-sonar-small-128k-online';

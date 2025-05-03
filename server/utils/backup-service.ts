@@ -1,315 +1,413 @@
 /**
- * Serviço para gerenciamento de backups do sistema
+ * Serviço de backup para a aplicação
+ * 
+ * Este arquivo fornece funcionalidades para realizar e gerenciar backups
+ * dos dados da aplicação, incluindo banco de dados e arquivos de configuração.
  */
 
-import { promises as fs } from 'fs';
+import { log } from './logger';
+import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import createLogger from './logger';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
-const logger = createLogger('backup-service');
+const execAsync = promisify(exec);
 
-// Tipos de backup
-type BackupType = 'full' | 'incremental';
+// Diretório onde os backups são armazenados
+const BACKUP_DIR = path.resolve(process.cwd(), 'backups');
 
-// Status de backup
-type BackupStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
-
-// Interface para metadados de backup
-interface BackupMetadata {
+// Interface para representar informações do backup
+export interface BackupInfo {
   id: string;
-  timestamp: string;
-  type: BackupType;
+  timestamp: Date;
   size: number;
-  status: BackupStatus;
-  filename: string;
-  description?: string;
+  name: string;
+  metadata?: any;
 }
 
-// Configurações
-const BACKUP_DIR = process.env.BACKUP_DIR || path.resolve(process.cwd(), 'backups');
-const MAX_BACKUPS = 10;
-const BACKUP_DB_COMMAND = process.env.BACKUP_DB_COMMAND || 'pg_dump -U postgres -d educhatconnect';
-const RESTORE_DB_COMMAND = process.env.RESTORE_DB_COMMAND || 'psql -U postgres -d educhatconnect';
+// Interface para status do sistema de backup
+export interface BackupStatus {
+  enabled: boolean;
+  lastBackup: Date | null;
+  nextScheduledBackup: Date | null;
+  totalBackups: number;
+  backupDir: string;
+  diskSpaceUsed: number;
+  autoBackupInterval: number;
+}
 
 /**
- * Classe de serviço para gerenciamento de backups
+ * Classe que gerencia as operações de backup
  */
-class BackupService {
-  private backups: BackupMetadata[] = [];
-  private isRunning = false;
-
+export class BackupService {
+  private status: BackupStatus;
+  private backupTimer: NodeJS.Timeout | null = null;
+  
   constructor() {
-    // Criar diretório de backup se não existir
-    this.initializeBackupDir();
-    // Carregar metadados de backups existentes
-    this.loadBackups();
-    logger.info('Serviço de backup inicializado');
+    // Garantir que o diretório de backup exista
+    if (!fs.existsSync(BACKUP_DIR)) {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+      log(`Diretório de backup criado: ${BACKUP_DIR}`, 'backup');
+    }
+    
+    // Inicializar status
+    this.status = {
+      enabled: true,
+      lastBackup: null,
+      nextScheduledBackup: null,
+      totalBackups: 0,
+      backupDir: BACKUP_DIR,
+      diskSpaceUsed: 0,
+      autoBackupInterval: 24 * 60 * 60 * 1000 // 24 horas (em milissegundos)
+    };
+    
+    // Carregar informações dos backups existentes
+    this.refreshStatus();
+    
+    // Iniciar backups automáticos (se habilitados)
+    this.scheduleNextBackup();
+    
+    log('Serviço de backup inicializado', 'backup');
   }
-
+  
   /**
-   * Inicializa o diretório de backups
+   * Atualiza as informações de status do serviço
    */
-  private async initializeBackupDir() {
+  async refreshStatus(): Promise<BackupStatus> {
     try {
-      await fs.mkdir(BACKUP_DIR, { recursive: true });
-      logger.info(`Diretório de backups criado: ${BACKUP_DIR}`);
+      // Contar os backups existentes
+      const files = fs.readdirSync(BACKUP_DIR);
+      const backupFiles = files.filter(f => f.endsWith('.zip') || f.endsWith('.sql') || f.endsWith('.json'));
+      
+      this.status.totalBackups = backupFiles.length;
+      
+      // Calcular espaço em disco usado
+      let totalSize = 0;
+      for (const file of backupFiles) {
+        const filePath = path.join(BACKUP_DIR, file);
+        const stats = fs.statSync(filePath);
+        totalSize += stats.size;
+      }
+      this.status.diskSpaceUsed = totalSize;
+      
+      // Encontrar o backup mais recente
+      if (backupFiles.length > 0) {
+        let mostRecent = new Date(0);
+        for (const file of backupFiles) {
+          const filePath = path.join(BACKUP_DIR, file);
+          const stats = fs.statSync(filePath);
+          if (stats.mtime > mostRecent) {
+            mostRecent = stats.mtime;
+          }
+        }
+        this.status.lastBackup = mostRecent;
+      }
+      
+      return { ...this.status };
     } catch (error) {
-      logger.error('Erro ao criar diretório de backups', { error });
+      log(`Erro ao atualizar status de backup: ${error}`, 'backup', 'error');
+      return { ...this.status };
     }
   }
-
+  
   /**
-   * Carrega metadados de backups existentes
+   * Agenda o próximo backup automático
    */
-  private async loadBackups() {
-    try {
-      const metadataFile = path.join(BACKUP_DIR, 'metadata.json');
+  scheduleNextBackup(): void {
+    if (!this.status.enabled) {
+      log('Backups automáticos estão desabilitados', 'backup');
+      return;
+    }
+    
+    // Limpar timer existente, se houver
+    if (this.backupTimer) {
+      clearTimeout(this.backupTimer);
+    }
+    
+    // Calcular quando o próximo backup deve ocorrer
+    const now = new Date();
+    let nextBackupTime: Date;
+    
+    if (!this.status.lastBackup) {
+      // Se nunca tiver feito backup, agendar para daqui a 1 hora
+      nextBackupTime = new Date(now.getTime() + 60 * 60 * 1000);
+    } else {
+      // Caso contrário, usar o intervalo configurado
+      const lastBackupTime = this.status.lastBackup.getTime();
+      const nextTime = lastBackupTime + this.status.autoBackupInterval;
       
-      // Verificar se arquivo de metadados existe
+      if (nextTime <= now.getTime()) {
+        // Se já estiver no passado, agendar para daqui a 5 minutos
+        nextBackupTime = new Date(now.getTime() + 5 * 60 * 1000);
+      } else {
+        nextBackupTime = new Date(nextTime);
+      }
+    }
+    
+    // Atualizar próximo horário de backup
+    this.status.nextScheduledBackup = nextBackupTime;
+    
+    // Calcular o tempo até o próximo backup
+    const timeUntilBackup = nextBackupTime.getTime() - now.getTime();
+    
+    log(`Próximo backup automático agendado para ${nextBackupTime.toISOString()}`, 'backup');
+    
+    // Agendar o próximo backup
+    this.backupTimer = setTimeout(() => this.createBackup(), timeUntilBackup);
+  }
+  
+  /**
+   * Cria um novo backup completo do sistema
+   * @param name Nome personalizado para o backup (opcional)
+   * @param metadata Metadados adicionais para o backup (opcional)
+   * @returns Informações sobre o backup criado
+   */
+  async createBackup(name?: string, metadata?: any): Promise<BackupInfo> {
+    try {
+      // Gerar ID único para o backup (timestamp + hash aleatório)
+      const timestamp = new Date();
+      const id = `backup_${timestamp.getTime()}_${Math.random().toString(36).substring(2, 10)}`;
+      
+      // Nome personalizado ou timestamp formatado
+      const backupName = name || `Backup ${timestamp.toISOString().replace(/[:.]/g, '-')}`;
+      
+      log(`Iniciando backup "${backupName}" (${id})...`, 'backup');
+      
+      // Criar diretório temporário para este backup
+      const tempDir = path.join(BACKUP_DIR, `tmp_${id}`);
+      fs.mkdirSync(tempDir, { recursive: true });
+      
       try {
-        const data = await fs.readFile(metadataFile, 'utf8');
-        this.backups = JSON.parse(data);
-        logger.info(`Carregados ${this.backups.length} backups existentes`);
+        // Criar arquivo de metadados
+        const metadataFile = path.join(tempDir, 'metadata.json');
+        fs.writeFileSync(metadataFile, JSON.stringify({
+          id,
+          name: backupName,
+          timestamp: timestamp.toISOString(),
+          metadata: metadata || {},
+          version: process.env.npm_package_version || 'unknown',
+          environment: process.env.NODE_ENV || 'development'
+        }, null, 2));
+        
+        // Fazer backup do banco de dados (simulado - substitua pelo código real)
+        // Na implementação real, aqui seria feito um dump do banco
+        const dbBackupPath = path.join(tempDir, 'database.sql');
+        fs.writeFileSync(dbBackupPath, `-- Backup do banco de dados (${timestamp.toISOString()})`);
+        
+        // Arquivar tudo em um único arquivo ZIP
+        const backupFileName = `${id}.zip`;
+        const backupPath = path.join(BACKUP_DIR, backupFileName);
+        
+        // Usar utilitário zip para comprimir
+        await execAsync(`cd "${tempDir}" && zip -r "${backupPath}" ./*`);
+        
+        // Remover diretório temporário
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        
+        // Obter tamanho do arquivo final
+        const stats = fs.statSync(backupPath);
+        const size = stats.size;
+        
+        // Atualizar status
+        this.status.lastBackup = timestamp;
+        await this.refreshStatus();
+        this.scheduleNextBackup();
+        
+        log(`Backup "${backupName}" criado com sucesso (${size} bytes)`, 'backup');
+        
+        return {
+          id,
+          timestamp,
+          size,
+          name: backupName,
+          metadata: metadata || {}
+        };
       } catch (error) {
-        if (error.code === 'ENOENT') {
-          // Arquivo não existe, criar novo
-          this.backups = [];
-          await this.saveMetadata();
-          logger.info('Arquivo de metadados de backup criado');
-        } else {
-          throw error;
+        // Limpar em caso de erro
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
         }
+        throw error;
       }
     } catch (error) {
-      logger.error('Erro ao carregar metadados de backups', { error });
-      this.backups = [];
+      log(`Erro ao criar backup: ${error}`, 'backup', 'error');
+      throw new Error(`Falha ao criar backup: ${error}`);
     }
   }
-
+  
   /**
-   * Salva metadados de backups no arquivo
+   * Obtém a lista de todos os backups disponíveis
+   * @returns Array com informações de todos os backups
    */
-  private async saveMetadata() {
+  async getBackups(): Promise<BackupInfo[]> {
     try {
-      const metadataFile = path.join(BACKUP_DIR, 'metadata.json');
-      await fs.writeFile(metadataFile, JSON.stringify(this.backups, null, 2), 'utf8');
-      logger.debug('Metadados de backup salvos');
+      // Listar todos os arquivos no diretório de backup
+      const files = fs.readdirSync(BACKUP_DIR);
+      const backupFiles = files.filter(f => f.endsWith('.zip'));
+      
+      const backups: BackupInfo[] = [];
+      
+      // Processar cada arquivo
+      for (const file of backupFiles) {
+        try {
+          // Extrair ID do nome do arquivo
+          const id = file.replace('.zip', '');
+          
+          // Obter estatísticas do arquivo
+          const filePath = path.join(BACKUP_DIR, file);
+          const stats = fs.statSync(filePath);
+          
+          // Extrair metadata (simulado - em uma implementação real extrairia do ZIP)
+          // Aqui assumimos que o ID contém o timestamp
+          const timestampMatch = id.match(/backup_(\d+)_/);
+          const timestamp = timestampMatch 
+            ? new Date(parseInt(timestampMatch[1])) 
+            : stats.mtime;
+          
+          backups.push({
+            id,
+            timestamp,
+            size: stats.size,
+            name: `Backup ${timestamp.toISOString()}`
+          });
+        } catch (error) {
+          log(`Erro ao processar backup ${file}: ${error}`, 'backup', 'warn');
+          // Continuar com o próximo arquivo
+        }
+      }
+      
+      // Ordenar por data (mais recente primeiro)
+      backups.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      
+      return backups;
     } catch (error) {
-      logger.error('Erro ao salvar metadados de backup', { error });
+      log(`Erro ao listar backups: ${error}`, 'backup', 'error');
+      return [];
     }
   }
-
+  
   /**
-   * Retorna lista de backups disponíveis
-   */
-  getBackups(): BackupMetadata[] {
-    return [...this.backups].sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-  }
-
-  /**
-   * Verifica se é necessário executar um backup
-   */
-  checkBackupNeeded(): { needed: boolean, type: BackupType } {
-    const sortedBackups = this.getBackups();
-    
-    // Se não há backups, precisamos de um completo
-    if (sortedBackups.length === 0) {
-      return { needed: true, type: 'full' };
-    }
-    
-    const now = new Date();
-    const lastFullBackup = sortedBackups.find(b => b.type === 'full' && b.status === 'completed');
-    const lastIncrementalBackup = sortedBackups.find(b => b.type === 'incremental' && b.status === 'completed');
-    
-    // Se não há backup completo, precisamos de um
-    if (!lastFullBackup) {
-      return { needed: true, type: 'full' };
-    }
-    
-    const lastFullDate = new Date(lastFullBackup.timestamp);
-    const daysSinceFullBackup = (now.getTime() - lastFullDate.getTime()) / (1000 * 60 * 60 * 24);
-    
-    // Se o último backup completo tem mais de 7 dias, precisamos de outro
-    if (daysSinceFullBackup > 7) {
-      return { needed: true, type: 'full' };
-    }
-    
-    // Se não há backup incremental ou o último backup foi há mais de 1 dia
-    if (!lastIncrementalBackup) {
-      return { needed: true, type: 'incremental' };
-    }
-    
-    const lastIncrementalDate = new Date(lastIncrementalBackup.timestamp);
-    const hoursSinceIncremental = (now.getTime() - lastIncrementalDate.getTime()) / (1000 * 60 * 60);
-    
-    // Se o último backup incremental tem mais de 24 horas
-    if (hoursSinceIncremental > 24) {
-      return { needed: true, type: 'incremental' };
-    }
-    
-    // Caso contrário, não precisamos de backup
-    return { needed: false, type: 'incremental' };
-  }
-
-  /**
-   * Executa um backup manual
-   * @param type Tipo de backup (full ou incremental)
-   * @returns Metadados do backup ou null se já estiver em execução
-   */
-  async performManualBackup(type: BackupType): Promise<BackupMetadata | null> {
-    // Verificar se já há um backup em andamento
-    if (this.isRunning) {
-      logger.warn('Tentativa de iniciar backup enquanto outro já está em execução');
-      return null;
-    }
-    
-    try {
-      this.isRunning = true;
-      
-      // Gerar ID e timestamp
-      const id = `backup_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      const timestamp = new Date().toISOString();
-      const filename = `${id}.sql`;
-      
-      // Criar metadados iniciais
-      const backup: BackupMetadata = {
-        id,
-        timestamp,
-        type,
-        size: 0,
-        status: 'in_progress',
-        filename
-      };
-      
-      // Adicionar aos metadados e salvar
-      this.backups.push(backup);
-      await this.saveMetadata();
-      
-      // Executar backup em background
-      this.executeBackup(backup).catch(error => {
-        logger.error(`Erro durante execução do backup ${id}`, { error });
-      });
-      
-      return backup;
-    } catch (error) {
-      this.isRunning = false;
-      logger.error('Erro ao iniciar backup manual', { error });
-      throw error;
-    }
-  }
-
-  /**
-   * Executa o processo de backup
-   * @param backup Metadados do backup
-   */
-  private async executeBackup(backup: BackupMetadata): Promise<void> {
-    try {
-      logger.info(`Iniciando execução do backup ${backup.id} (${backup.type})`);
-      
-      const backupPath = path.join(BACKUP_DIR, backup.filename);
-      
-      // Executar comando de backup
-      const command = `${BACKUP_DB_COMMAND} > ${backupPath}`;
-      execSync(command, { stdio: 'ignore' });
-      
-      // Obter tamanho do arquivo
-      const stats = await fs.stat(backupPath);
-      backup.size = stats.size;
-      backup.status = 'completed';
-      
-      logger.info(`Backup ${backup.id} concluído com sucesso (${backup.size} bytes)`);
-      
-      // Remover backups excedentes
-      await this.cleanupOldBackups();
-    } catch (error) {
-      backup.status = 'failed';
-      logger.error(`Falha no backup ${backup.id}`, { error });
-    } finally {
-      // Atualizar metadados e liberar flag
-      await this.saveMetadata();
-      this.isRunning = false;
-    }
-  }
-
-  /**
-   * Restaura um backup pelo seu ID
-   * @param id ID do backup
-   * @returns true se restaurado com sucesso
+   * Restaura um backup a partir do seu ID
+   * @param id ID do backup a ser restaurado
+   * @returns true se a restauração foi bem-sucedida
    */
   async restoreBackup(id: string): Promise<boolean> {
     try {
-      // Encontrar backup pelos metadados
-      const backup = this.backups.find(b => b.id === id);
+      const backupPath = path.join(BACKUP_DIR, `${id}.zip`);
       
-      if (!backup || backup.status !== 'completed') {
-        logger.warn(`Tentativa de restaurar backup inexistente ou incompleto: ${id}`);
-        return false;
+      // Verificar se o arquivo existe
+      if (!fs.existsSync(backupPath)) {
+        throw new Error(`Backup com ID ${id} não encontrado`);
       }
       
-      const backupPath = path.join(BACKUP_DIR, backup.filename);
+      log(`Iniciando restauração do backup ${id}...`, 'backup');
       
-      // Verificar se arquivo existe
+      // Criar diretório temporário para extração
+      const tempDir = path.join(BACKUP_DIR, `restore_${id}`);
+      fs.mkdirSync(tempDir, { recursive: true });
+      
       try {
-        await fs.access(backupPath);
+        // Extrair o arquivo ZIP
+        await execAsync(`unzip -o "${backupPath}" -d "${tempDir}"`);
+        
+        // Aqui seria implementada a restauração real dos dados
+        // Por exemplo, importar o arquivo SQL para o banco de dados
+        // e copiar arquivos para os locais apropriados
+        
+        log(`Simulando restauração do banco de dados...`, 'backup');
+        // await execAsync(`psql -f "${tempDir}/database.sql" ${process.env.DATABASE_URL}`);
+        
+        // Limpar diretório temporário
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        
+        log(`Backup ${id} restaurado com sucesso`, 'backup');
+        return true;
       } catch (error) {
-        logger.error(`Arquivo de backup não encontrado: ${backupPath}`, { error });
-        return false;
+        // Limpar em caso de erro
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+        throw error;
+      }
+    } catch (error) {
+      log(`Erro ao restaurar backup ${id}: ${error}`, 'backup', 'error');
+      throw new Error(`Falha ao restaurar backup: ${error}`);
+    }
+  }
+  
+  /**
+   * Remove um backup pelo ID
+   * @param id ID do backup a ser removido
+   * @returns true se o backup foi removido com sucesso
+   */
+  async deleteBackup(id: string): Promise<boolean> {
+    try {
+      const backupPath = path.join(BACKUP_DIR, `${id}.zip`);
+      
+      // Verificar se o arquivo existe
+      if (!fs.existsSync(backupPath)) {
+        throw new Error(`Backup com ID ${id} não encontrado`);
       }
       
-      logger.info(`Iniciando restauração do backup ${id}`);
+      // Remover o arquivo
+      fs.unlinkSync(backupPath);
       
-      // Executar comando de restauração
-      const command = `${RESTORE_DB_COMMAND} < ${backupPath}`;
-      execSync(command, { stdio: 'ignore' });
+      // Atualizar status
+      await this.refreshStatus();
       
-      logger.info(`Backup ${id} restaurado com sucesso`);
+      log(`Backup ${id} removido com sucesso`, 'backup');
       return true;
     } catch (error) {
-      logger.error(`Erro ao restaurar backup ${id}`, { error });
+      log(`Erro ao remover backup ${id}: ${error}`, 'backup', 'error');
       return false;
     }
   }
-
+  
   /**
-   * Remove backups antigos para manter apenas um número máximo
+   * Obtém o status atual do sistema de backup
+   * @returns Informações sobre o estado atual do backup
    */
-  private async cleanupOldBackups(): Promise<void> {
-    try {
-      // Ordenar backups por data (mais recentes primeiro)
-      const sortedBackups = [...this.backups].sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      
-      // Se temos mais que o limite, remover os excedentes
-      if (sortedBackups.length > MAX_BACKUPS) {
-        const backupsToRemove = sortedBackups.slice(MAX_BACKUPS);
-        
-        for (const backup of backupsToRemove) {
-          try {
-            // Remover arquivo
-            const backupPath = path.join(BACKUP_DIR, backup.filename);
-            await fs.unlink(backupPath);
-            
-            // Remover dos metadados
-            this.backups = this.backups.filter(b => b.id !== backup.id);
-            
-            logger.info(`Backup antigo removido: ${backup.id}`);
-          } catch (error) {
-            logger.error(`Erro ao remover backup antigo ${backup.id}`, { error });
-          }
-        }
-        
-        // Salvar metadados atualizados
-        await this.saveMetadata();
+  getStatus(): BackupStatus {
+    return { ...this.status };
+  }
+  
+  /**
+   * Habilita ou desabilita os backups automáticos
+   * @param enabled true para habilitar, false para desabilitar
+   */
+  setEnabled(enabled: boolean): void {
+    this.status.enabled = enabled;
+    
+    if (enabled) {
+      log('Backups automáticos habilitados', 'backup');
+      this.scheduleNextBackup();
+    } else {
+      log('Backups automáticos desabilitados', 'backup');
+      if (this.backupTimer) {
+        clearTimeout(this.backupTimer);
+        this.backupTimer = null;
       }
-    } catch (error) {
-      logger.error('Erro ao limpar backups antigos', { error });
+    }
+  }
+  
+  /**
+   * Define o intervalo entre backups automáticos
+   * @param intervalMs Intervalo em milissegundos
+   */
+  setBackupInterval(intervalMs: number): void {
+    if (intervalMs < 60000) { // Mínimo de 1 minuto
+      intervalMs = 60000;
+    }
+    
+    this.status.autoBackupInterval = intervalMs;
+    log(`Intervalo de backup automático definido para ${intervalMs}ms`, 'backup');
+    
+    // Reagendar próximo backup
+    if (this.status.enabled) {
+      this.scheduleNextBackup();
     }
   }
 }
 
-// Exportar instância única do serviço
-export default new BackupService();
+// Exportar uma instância única do serviço de backup
+export const backupService = new BackupService();

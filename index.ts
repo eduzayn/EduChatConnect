@@ -3,12 +3,16 @@
  * Coordena a detecção, avaliação e execução de automações
  */
 
-import { IStorage } from '../../storage';
-import { Automation, Message } from '@shared/schema';
-import { RuleEngine } from './rule-engine';
-import { MessageTemplater } from './message-templater';
-import { AutomationExecutor } from './executor';
-import { log } from '../../vite';
+import { IStorage } from './server/storage';
+import { Automation, Message } from './shared/schema';
+import { RuleEngine } from './server/services/rule-engine';
+import { MessageTemplater } from './server/services/message-templater';
+import { AutomationExecutor } from './server/services/executor';
+
+// Função simples de log para substituir log de vite
+function log(message: string, category: string = 'app', level: string = 'info'): void {
+  console.log(`[${new Date().toISOString()}] [${level.toUpperCase()}] [${category}] ${message}`);
+}
 
 /**
  * Contexto para execução de automações

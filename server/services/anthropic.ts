@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { log } from '../../vite';
+import { log } from '../utils/logger';
 
 // the newest Anthropic model is "claude-3-7-sonnet-20250219" which was released February 24, 2025
 const DEFAULT_MODEL = "claude-3-7-sonnet-20250219";
