@@ -7,8 +7,12 @@ const isProduction = process.env.NODE_ENV === 'production';
 console.log(`Environment: ${isProduction ? 'production' : 'development'}`);
 
 // Import path for file checking
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Check for compiled files
 const distServerPath = path.join(__dirname, 'dist', 'server', 'index.js');
@@ -34,19 +38,20 @@ function fallbackToTsNode() {
   
   try {
     // Use dynamic import for compatibility
-    const { spawn } = require('child_process');
-    const tsNodeProcess = spawn('npx', ['tsx', 'server/index.ts'], {
-      stdio: 'inherit',
-      shell: true
-    });
-    
-    tsNodeProcess.on('error', (error) => {
-      console.error('Error starting tsx process:', error);
-    });
-    
-    process.on('SIGINT', () => {
-      tsNodeProcess.kill('SIGINT');
-      process.exit(0);
+    import('child_process').then(({ spawn }) => {
+      const tsNodeProcess = spawn('npx', ['tsx', 'server/index.ts'], {
+        stdio: 'inherit',
+        shell: true
+      });
+      
+      tsNodeProcess.on('error', (error) => {
+        console.error('Error starting tsx process:', error);
+      });
+      
+      process.on('SIGINT', () => {
+        tsNodeProcess.kill('SIGINT');
+        process.exit(0);
+      });
     });
   } catch (fallbackErr) {
     console.error('Fallback server start failed:', fallbackErr);
