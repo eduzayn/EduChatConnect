@@ -21,7 +21,7 @@ try {
 
   // Run TypeScript compilation with path to local tsc
   console.log('Compiling TypeScript...');
-  execSync('npx --no-install tsc', { stdio: 'inherit' });
+  execSync('npx tsc --project tsconfig.node.json', { stdio: 'inherit' });
 
   // Copy necessary files
   console.log('Copying static files...');
