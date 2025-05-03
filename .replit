@@ -6,8 +6,8 @@ localPort = 3000
 externalPort = 80
 
 [deployment]
-run = ["sh", "-c", "node index.js"]
-build = ["sh", "-c", "npm run build"]
+run = ["node", "index.js"]
+build = ["npm", "run", "build"]
 deploymentTarget = "cloud_run"
 ignorePorts = false
 

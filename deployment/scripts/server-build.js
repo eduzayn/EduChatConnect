@@ -1,55 +1,55 @@
-/**
- * Script alternativo para fazer build apenas do servidor
- * Isso contorna problemas de build do frontend com Vite
- */
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+// Deployment build script (ES Modules compatible)
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-console.log('Iniciando build alternativa para deploy...');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Criar diretório dist se não existir
-const distDir = path.join(__dirname, 'dist');
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
-  console.log('✓ Diretório dist criado');
-}
+console.log('=== EduChatConnect Deployment Build ===');
 
 try {
-  // Build apenas do servidor com esbuild
-  console.log('Compilando servidor com esbuild...');
-  execSync('npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist', 
-    { stdio: 'inherit' });
-  
-  console.log('✓ Build do servidor concluída com sucesso!');
-  
-  // Copiar arquivos estáticos necessários
-  console.log('Copiando arquivos estáticos...');
-  
-  // Copiar .env se existir
-  if (fs.existsSync(path.join(__dirname, '.env'))) {
-    fs.copyFileSync(
-      path.join(__dirname, '.env'),
-      path.join(distDir, '.env')
-    );
-    console.log('✓ Arquivo .env copiado');
+  // Ensure dist directory exists
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    console.log('✓ Created dist directory');
   }
   
-  // Criar arquivo de verificação
-  fs.writeFileSync(
-    path.join(distDir, 'deploy-info.json'),
-    JSON.stringify({
-      buildDate: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'production',
-      serverOnly: true
-    }, null, 2)
-  );
+  // Run TypeScript compilation
+  console.log('Compiling TypeScript...');
+  execSync('npx tsc', { stdio: 'inherit' });
   
-  console.log('\n✅ Build alternativa concluída com sucesso!');
-  console.log('Execute com: NODE_ENV=production node dist/index.js');
+  // Create a basic HTML file if needed
+  const publicDir = path.resolve(process.cwd(), 'public');
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
   
+  if (!fs.existsSync(path.join(publicDir, 'index.html'))) {
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduChatConnect</title>
+</head>
+<body>
+  <div id="root">
+    <h1>EduChatConnect</h1>
+    <p>Servidor em execução</p>
+  </div>
+</body>
+</html>`;
+    
+    fs.writeFileSync(path.join(publicDir, 'index.html'), htmlContent);
+    console.log('✓ Created index.html');
+  }
+  
+  console.log('Build completed successfully!');
 } catch (error) {
-  console.error('\n❌ Erro durante a build:', error);
+  console.error('Build failed:', error);
   process.exit(1);
 }

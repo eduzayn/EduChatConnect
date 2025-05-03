@@ -1,1 +1,5 @@
-{"run":"[\"nodejs-20\",\"server/bootstrap/index.js\"]","deploymentTarget":"cloudrun"}
+
+{
+  "run": "node index.js",
+  "deploymentTarget": "cloud_run"
+}
