@@ -1,0 +1,1346 @@
+﻿Projeto Edunéxia NextGen: Especificação Técnica Detalhada
+1. Sumário Executivo
+Propósito: Este documento fornece uma visão geral de alto nível, primariamente destinada ao Proprietário do Produto, delineando a arquitetura e funcionalidades do sistema Edunéxia NextGen.
+Conteúdo:
+O Edunéxia NextGen é concebido como um ecossistema educacional e de negócios ultra moderno e abrangente. O objetivo é criar uma plataforma que não apenas facilite o aprendizado online, mas também integre funcionalidades robustas de gestão comercial, financeira e de produtividade. A visão é consolidar, em uma única solução, as capacidades de um Learning Management System (LMS) avançado, um Content Management System (CMS) flexível, um Customer Relationship Management (CRM) integrado, ferramentas financeiras e um sistema inovador de monitoramento de produtividade para equipes em home office.
+A arquitetura do sistema se baseia em princípios fundamentais de multi-inquilinato (multi-tenancy), utilizando Controle de Acesso Baseado em Atributos (ABAC) para garantir isolamento seguro de dados entre diferentes instituições clientes. A modularidade é outro pilar, permitindo que diferentes componentes do sistema (acadêmico, comercial, financeiro, IA, produtividade) possam ser desenvolvidos, implantados e escalados de forma independente, promovendo manutenibilidade e flexibilidade. A plataforma será fortemente orientada a APIs, facilitando a integração entre seus próprios módulos e com uma vasta gama de serviços de terceiros. A Inteligência Artificial (IA) será pervasiva, otimizando processos, auxiliando na criação de conteúdo e personalizando a experiência do usuário. A automação será um foco constante, visando simplificar tarefas desde a captação de leads e matrículas até a emissão de certificados e o acompanhamento financeiro.
+Funcionalmente, o Edunéxia NextGen abrangerá múltiplos portais, cada um com um propósito específico: Portal do Aluno (LMS), Portal do Professor (CMS), Portal Administrativo Central, Portal do Polo Educacional e Portal do Parceiro de Certificação. Essa estrutura multi-portal visa atender às necessidades distintas de cada grupo de usuários dentro do ecossistema.
+A pilha tecnológica foi selecionada com foco na modernidade e flexibilidade. A preferência inicial recai sobre Replit para desenvolvimento e Neon como banco de dados, dada a familiaridade limitada do Proprietário do Produto com programação e a integração nativa oferecida.1 Contudo, a arquitetura é projetada para ser portável, com planos B robustos utilizando Supabase como banco de dados alternativo e Vercel ou AWS para hospedagem, garantindo escalabilidade e desempenho em produção.3
+Inspirado nas funcionalidades robustas do Open edX 7 e na eficiência comercial do Kajabi 9, o Edunéxia NextGen busca combinar o melhor dos dois mundos, adicionando inovações como o monitoramento de produtividade e uma central de alimentação de IA personalizável por cliente. O objetivo final é criar uma plataforma escalável, segura e preparada para o futuro, estabelecendo um novo padrão para a educação online moderna.
+2. Arquitetura do Sistema
+2.1. Visão Geral Conceitual
+Propósito: Estabelecer um entendimento compartilhado dos principais componentes do sistema e suas interações, utilizando uma abordagem visual estruturada.
+Conteúdo:
+A arquitetura do Edunéxia NextGen é projetada para ser modular e escalável, suportando um ecossistema complexo de funcionalidades educacionais e de negócios. Utilizando o Modelo C4 para visualização, podemos decompor o sistema em níveis progressivos de detalhe.
+Nível 1: Diagrama de Contexto do Sistema (C4 L1)
+Este diagrama posiciona o Edunéxia NextGen no seu ambiente operacional. Ele mostra o sistema central interagindo com diferentes tipos de usuários (Alunos, Professores, Administradores de Instituição, Administradores de Polo, Parceiros de Certificação, Administradores Globais) e sistemas externos chave. Os sistemas externos incluem:
+* Gateways de Pagamento: Asaas, Stripe, Iugu.11
+* Provedores de Autenticação: Auth0.14
+* Serviços de Armazenamento de Conteúdo: Google Drive, Dropbox, Vimeo, YouTube, Bunny.net Storage/Stream.15
+* Serviços de Comunicação: WhatsApp Business API, Instagram Graph API, Facebook Messenger API, Provedores SMTP (Resend, Brevo).20
+* Serviços de Verificação de Plágio: Turnitin.25
+* Monitoramento de Erros: Sentry.26
+* Segurança de Formulários: Google reCAPTCHA.27
+Figura 1: Diagrama de Contexto do Sistema Edunéxia NextGen (Ilustrativo)
+(Nota: Um diagrama real seria inserido aqui)
+Nível 2: Diagrama de Contêineres (C4 L2)
+Este nível detalha as principais unidades de implantação (contêineres) dentro do Edunéxia NextGen e suas interações de alto nível. Os contêineres principais são:
+1. Aplicações Frontend (React/Next.js): Instâncias separadas para cada portal (Aluno, Professor, Admin Central, Polo, Parceiro) e para o Site Público de Marketing/Vendas. São Single Page Applications (SPAs) ou Server-Side Rendered (SSR) applications que interagem com o Backend via API Gateway.
+2. API Gateway (Node.js/Deno): Ponto de entrada único para todas as requisições das aplicações frontend. Responsável por roteamento, autenticação (validação de JWT do Auth0), rate limiting e agregação de respostas de serviços backend.
+3. Serviços Backend Modulares (Node.js/Deno): Conjunto de serviços ou módulos bem definidos, potencialmente implantáveis independentemente (microservices) ou como parte de um monólito modular. Exemplos:
+   * Serviço de Autenticação/Autorização: Gerencia perfis de usuário, papéis, permissões e interage com Auth0 e políticas RLS.
+   * Serviço Acadêmico: Lógica de negócios para cursos, disciplinas, módulos, matrículas, progresso, certificados. Interage com Turnitin.
+   * Serviço Comercial (CRM): Gerenciamento de leads, funis de venda, automação de comunicação (WhatsApp, Email).
+   * Serviço Financeiro: Lógica de pagamentos, assinaturas, split de pagamentos, integração com gateways (Asaas, Stripe, Iugu).
+   * Serviço de IA: Orquestra chamadas para LLMs, gerencia o RAG e a central de alimentação.
+   * Serviço de Produtividade: Coleta e processa dados de atividade do usuário, gera relatórios.
+4. Banco de Dados Primário (PostgreSQL - Neon/Supabase): Armazena todos os dados relacionais da aplicação (usuários, cursos, pagamentos, logs, configurações, etc.). Utiliza RLS para multi-tenancy.
+5. Banco de Dados Vetorial (e.g., pgvector, Pinecone): Armazena embeddings de documentos para a funcionalidade de Retrieval-Augmented Generation (RAG) da IA.
+6. Camada de Integração Externa: Módulos ou serviços responsáveis por encapsular a comunicação com APIs de terceiros (Google Drive, Asaas, WhatsApp, etc.).
+Figura 2: Diagrama de Contêineres Edunéxia NextGen (Ilustrativo)
+(Nota: Um diagrama real seria inserido aqui)
+A abordagem modular, inspirada no conceito de Independent Deployable Applications (IDAs) do Open edX 7, é crucial dada a amplitude funcional do Edunéxia NextGen. Mesmo que inicialmente implementado como um monólito modular para simplificar o desenvolvimento no Replit, a separação lógica clara entre os serviços (Acadêmico, Comercial, Financeiro, IA, Produtividade) é fundamental. Esta separação facilita a gestão da complexidade, permite que diferentes partes do sistema escalem de forma independente (por exemplo, o consumo de vídeo no LMS pode ter picos diferentes da geração de relatórios financeiros no Admin) e abre caminho para uma futura transição para microservices, se necessário. A falha isolada em um módulo menos crítico, como o monitoramento de produtividade, torna-se menos provável de impactar a funcionalidade central do LMS ou do sistema financeiro. O uso do Modelo C4 ajuda a comunicar essa estrutura complexa de forma clara para todas as partes interessadas, desde o Proprietário do Produto até a equipe de desenvolvimento.
+2.2. Racional da Pilha Tecnológica
+Propósito: Justificar as escolhas tecnológicas para cada camada da arquitetura, comparando as opções preferenciais com as alternativas e considerando as restrições e objetivos do projeto.
+Conteúdo:
+A seleção da pilha tecnológica para o Edunéxia NextGen busca equilibrar modernidade, desempenho, ecossistema de desenvolvimento e a preferência do usuário por um início simplificado, mantendo a portabilidade para ambientes de produção robustos.
+* Frontend: React.js (com Next.js) é a escolha principal.
+   * Justificativa: React possui um ecossistema vasto, uma arquitetura baseada em componentes que promove reusabilidade e manutenibilidade, e forte suporte da comunidade. Next.js adiciona capacidades cruciais como Server-Side Rendering (SSR) e Static Site Generation (SSG), essenciais para o desempenho percebido pelo usuário e para a otimização de motores de busca (SEO) do site público de marketing. A popularidade do React também facilita a contratação de desenvolvedores.
+   * Alternativas: Vue.js e Angular são frameworks competentes, mas a preferência implícita do usuário e a força do ecossistema React/Next.js para aplicações web modernas tornam esta a escolha mais pragmática.
+* Backend: Node.js é recomendado como ponto de partida, com Deno como uma possibilidade futura.
+   * Justificativa: Node.js oferece um ecossistema maduro, vasta disponibilidade de bibliotecas e SDKs de terceiros, e uma grande base de desenvolvedores.28 Isso acelera o desenvolvimento inicial, especialmente considerando o número de integrações necessárias (Asaas, Google APIs, etc.). Embora Deno ofereça vantagens teóricas em segurança, suporte nativo a TypeScript e uma API mais moderna 29, sua compatibilidade com o ecossistema Node.js, apesar de melhorada 28, ainda pode apresentar atritos. A necessidade de integrar rapidamente múltiplas APIs de terceiros favorece a estabilidade e o suporte amplo do Node.js.
+   * Alternativas: Deno 28 permanece uma opção interessante para o futuro, especialmente se a segurança aprimorada e o TypeScript nativo se tornarem prioridades absolutas e a compatibilidade do ecossistema se solidificar ainda mais. Python (com Django/Flask), usado pelo Open edX 7, é outra opção robusta, mas a escolha do Node.js alinha-se melhor com um frontend baseado em JavaScript/React.
+* Banco de Dados Primário: PostgreSQL.
+   * Justificativa: PostgreSQL é um RDBMS extremamente robusto, maduro, compatível com SQL padrão e com excelente suporte a funcionalidades avançadas como JSONB (para flexibilidade de dados) e Row-Level Security (RLS), que é fundamental para a estratégia de multi-tenancy ABAC.8 É a base tanto para Neon quanto para Supabase.
+   * Hospedagem do Banco de Dados: Neon é a preferência inicial do usuário, com Supabase como plano B.
+      * Neon: Focado em ser um PostgreSQL serverless, oferece provisionamento instantâneo no Replit 1, escalabilidade automática e modelo de pagamento por uso.1 Sua integração com Vercel também é um ponto positivo.4 É essencialmente uma camada de gerenciamento sobre o PostgreSQL.
+      * Supabase: Posiciona-se como uma alternativa open-source ao Firebase, oferecendo não apenas PostgreSQL, mas também Autenticação, Armazenamento de Arquivos e funcionalidades Realtime.3 Poderia potencialmente simplificar a arquitetura ao consolidar alguns serviços, mas pode ser visto como mais opinativo que o Neon.32
+      * Recomendação: Iniciar com Neon, conforme solicitado, mas projetar os esquemas usando SQL padrão e ORMs compatíveis (como Prisma ou TypeORM) para garantir a portabilidade para Supabase ou qualquer outra instância PostgreSQL (incluindo AWS RDS/Aurora) caso a escala ou os requisitos mudem.
+   * Banco de Dados Vetorial (para RAG): A necessidade de uma base de conhecimento por tenant para a IA exige um banco de dados vetorial. Opções incluem a extensão pgvector para PostgreSQL (mantendo a simplicidade da infraestrutura), ou serviços dedicados como Pinecone ou Weaviate. A escolha final pode ser adiada, mas a arquitetura deve prever sua inclusão.
+* Hospedagem: Replit como ponto de partida, com Vercel e AWS como alvos de produção.
+   * Justificativa: Replit é a escolha inicial do usuário devido à sua facilidade de uso, integração com Neon e assistência de IA (Agent).1 No entanto, Replit é primariamente um ambiente de desenvolvimento e prototipagem, com limitações conhecidas para aplicações de produção em larga escala em termos de escalabilidade, segurança, controle de DevOps e SLAs.6 Vercel é uma excelente plataforma para aplicações Next.js, oferecendo deployments otimizados, funções serverless, CI/CD integrado e bom suporte a domínios customizados e integrações com Neon/Supabase 4, embora possa ter custos e limitações a serem considerados.5 AWS oferece a máxima flexibilidade e escalabilidade, mas com a maior complexidade de gerenciamento.
+   * Recomendação: Desenvolver inicialmente no Replit, mas projetar para portabilidade. Isso significa evitar dependências excessivas de funcionalidades específicas do Replit, usar padrões de configuração (variáveis de ambiente), e ter uma estratégia clara para migração para Vercel (preferível para Next.js) ou AWS (para controle máximo). A arquitetura deve ser conteinerizável (usando Dockerfiles, mesmo que não usados no Replit) para facilitar a implantação em outras plataformas. A preferência do usuário pelo Replit introduz uma tensão entre a facilidade inicial e a robustez de produção a longo prazo, que deve ser gerenciada através de um design portável.
+* CDN (Content Delivery Network): Bunny.net.
+   * Justificativa: Oferece uma combinação atraente de desempenho global 34, custo-benefício (modelo pay-as-you-go com mínimo mensal baixo) 34, e funcionalidades adicionais como otimizador de imagens/website e armazenamento de objetos.19 É uma alternativa competitiva a CDNs maiores como CloudFront ou Fastly.34
+* Autenticação: Auth0.
+   * Justificativa: É uma plataforma de identidade como serviço (IDaaS) madura e robusta, especializada em fluxos de autenticação e autorização complexos. Oferece suporte a login social, Multi-Factor Authentication (MFA), Role-Based Access Control (RBAC) e é bem adequada para cenários B2B multi-tenant.14 Sua abordagem focada em segurança e conformidade 14 é valiosa.
+   * Alternativas: Supabase Auth (se Supabase for escolhido como DB/BaaS) é uma opção integrada. Implementar autenticação própria é significativamente mais complexo e arriscado.
+* Monitoramento de Erros: Sentry.
+   * Justificativa: É um padrão de mercado para monitoramento de erros em aplicações web e mobile. Possui SDKs excelentes para Node.js e React, fornece rastreamento detalhado de erros e contexto, e oferece funcionalidades de monitoramento de desempenho.26 Seus planos Free e Team são geralmente adequados para iniciar 26, embora o modelo de precificação baseado em eventos precise ser monitorado.36
+A escolha de tecnologias como Node.js sobre Deno, ou a necessidade de planejar a migração do Replit, são exemplos de decisões que priorizam a velocidade de desenvolvimento inicial e a mitigação de riscos de integração (Node.js) ou a viabilidade de produção a longo prazo (Vercel/AWS), mesmo que introduzam alguma complexidade adicional no planejamento. A seleção de PostgreSQL como RDBMS e Auth0 para identidade fornece bases sólidas e comprovadas para funcionalidades críticas como persistência de dados e segurança de acesso.
+2.3. Estratégia Multi-Tenancy
+Propósito: Definir a abordagem técnica para isolar dados e funcionalidades entre as diferentes instituições (tenants) que utilizarão a plataforma Edunéxia NextGen, garantindo segurança e privacidade.
+Conteúdo:
+A arquitetura multi-tenant é essencial para que o Edunéxia NextGen possa servir múltiplas instituições a partir de uma única instância da aplicação e infraestrutura, otimizando custos e gerenciamento.37 A escolha do modelo de multi-tenancy impacta diretamente a segurança, escalabilidade e complexidade da aplicação.
+Modelos de Multi-Tenancy Considerados:
+1. Bancos de Dados Separados por Tenant: Cada instituição teria seu próprio banco de dados fisicamente isolado.
+   * Prós: Isolamento máximo de dados.
+   * Contras: Custo de infraestrutura elevado, complexidade de gerenciamento (provisionamento, backups, migrações por tenant), mais difícil de agregar dados globais.
+2. Schemas Separados por Tenant (Dentro de um Banco de Dados Compartilhado): Cada instituição teria seu próprio conjunto de tabelas dentro de um schema dedicado em um único banco de dados PostgreSQL. 37
+   * Prós: Bom isolamento lógico de dados, mais fácil de gerenciar que bancos separados.
+   * Contras: Migrações de schema precisam ser aplicadas a todos os schemas 38, pode haver limites no número de schemas, complexidade na gestão de conexões e roteamento de queries.
+3. Banco de Dados Compartilhado, Schema Compartilhado: Todas as instituições compartilham as mesmas tabelas, com uma coluna (ex: institution_id ou tenant_id) diferenciando os dados de cada tenant. 37
+   * Prós: Menor custo de infraestrutura, gerenciamento centralizado, mais fácil de implementar agregações globais, alinhado com bancos de dados serverless.
+   * Contras: Requer mecanismos robustos de isolamento na camada de aplicação e/ou banco de dados para prevenir vazamento de dados entre tenants.
+Abordagem Recomendada: Banco de Dados Compartilhado, Schema Compartilhado com RLS e ABAC
+A abordagem recomendada para o Edunéxia NextGen é utilizar um banco de dados PostgreSQL compartilhado com um schema compartilhado, implementando o isolamento de dados através de Row-Level Security (RLS) do PostgreSQL 30 e aplicando Attribute-Based Access Control (ABAC).
+* Justificativa: Este modelo oferece o melhor equilíbrio entre custo-eficiência, escalabilidade e segurança para uma aplicação SaaS moderna como o Edunéxia NextGen.39 RLS permite definir políticas de segurança diretamente no banco de dados, garantindo que, mesmo em caso de falhas na lógica da aplicação, o acesso aos dados permaneça restrito. ABAC oferece um controle de acesso mais granular e flexível do que o Role-Based Access Control (RBAC) tradicional, permitindo definir permissões com base em atributos do usuário (papel, departamento), do recurso (tipo de curso, status do documento) e do contexto (horário, localização).
+Detalhes da Implementação:
+1. Identificação do Tenant: Uma coluna institution_id (UUID) será adicionada a todas as tabelas que contêm dados específicos de um tenant (e.g., users, courses, enrollments, payments, productivity_logs). Esta coluna será indexada para otimizar as consultas e as políticas RLS.
+2. Políticas RLS: Políticas de segurança serão criadas em cada tabela relevante usando CREATE POLICY. Essas políticas utilizarão a institution_id e potencialmente outros atributos (como o papel do usuário) para filtrar as linhas visíveis ou modificáveis. 30
+   * Exemplo Básico: CREATE POLICY tenant_isolation ON courses USING (institution_id = current_setting('app.current_tenant_id')::uuid);
+   * A opção FORCE ROW LEVEL SECURITY será usada em tabelas críticas para garantir que até mesmo os proprietários das tabelas estejam sujeitos às políticas, a menos que sejam superusuários ou tenham o atributo BYPASSRLS.30
+3. Contexto da Aplicação: O backend (Node.js) será responsável por definir o contexto da sessão do banco de dados para cada requisição. Após autenticar o usuário via Auth0, o backend extrairá a institution_id e o user_id (e potencialmente papéis/atributos) do token JWT e os definirá como variáveis de sessão no PostgreSQL antes de executar qualquer query.
+   * Exemplo: SET LOCAL app.current_tenant_id = 'uuid_da_instituicao_do_usuario';
+   * SET LOCAL app.current_user_id = 'uuid_do_usuario';
+   * SET LOCAL app.current_role = 'papel_do_usuario_na_instituicao';
+4. Integração com Auth0: Auth0 será usado para gerenciar usuários, suas associações a organizações (tenants) e seus papéis dentro dessas organizações.35 Essas informações serão incluídas no token JWT emitido pelo Auth0 e consumidas pelo backend para estabelecer o contexto RLS.
+Implementar ABAC via RLS exige um design cuidadoso das políticas e uma configuração consistente do contexto da aplicação. As políticas RLS são aplicadas implicitamente pelo banco de dados a cada acesso, o que fornece uma camada de segurança robusta. No entanto, políticas complexas, especialmente aquelas que envolvem joins ou subqueries para determinar o acesso (como um professor acessando apenas dados de seus alunos matriculados em seus cursos), podem impactar o desempenho se as colunas envolvidas não estiverem devidamente indexadas.31 Além disso, o processo de migração de schema deve levar em conta a existência das políticas RLS, potencialmente exigindo que as migrações sejam executadas por um superusuário ou que as políticas sejam temporariamente desabilitadas e recriadas. O mapeamento entre os papéis e permissões definidos no Auth0 14 e as variáveis de sessão usadas nas políticas RLS do PostgreSQL é um ponto crítico que deve ser implementado de forma segura e precisa pela aplicação backend.
+2.4. Arquitetura de White-Labeling
+Propósito: Definir a abordagem técnica que permitirá às instituições clientes (tenants) personalizar a aparência da plataforma Edunéxia NextGen e acessá-la através de seus próprios domínios.
+Conteúdo:
+A funcionalidade de white-labeling é crucial para que as instituições clientes possam oferecer a plataforma Edunéxia NextGen como se fosse sua, reforçando sua própria marca.41 A arquitetura deve suportar a personalização de diversos elementos visuais e de acesso.
+Pontos de Personalização (White-Label):
+* Identidade Visual: Logos da instituição, esquemas de cores primárias e secundárias, seleção de fontes 41, ícone de favoritos (favicon).
+* Comunicação: Templates de e-mails transacionais (boas-vindas, notificações, recuperação de senha) com branding da instituição.
+* Acesso: Domínio personalizado (ex: cursos.instituicaoA.com.br) ou subdomínio (ex: instituicaoA.edunexianext.com).41
+* Site de Marketing Público: Opção para que a instituição tenha uma versão personalizada do site público de marketing/vendas associada ao seu domínio.43
+Implementação Técnica:
+1. Armazenamento de Configurações:
+   * O schema do banco de dados incluirá tabelas ou colunas específicas para armazenar as configurações de white-labeling por tenant. Uma tabela tenant_configurations (ou colunas JSONB na tabela institutions) armazenará URLs para logos, códigos hexadecimais de cores, nomes de fontes selecionadas, snippets de CSS customizado (se permitido), configurações de domínio e chaves de API para serviços específicos do tenant (se aplicável).37
+2. Frontend:
+   * A aplicação frontend (Next.js) buscará a configuração de branding do tenant atual (identificado via subdomínio, domínio customizado ou após login).
+   * Utilizará CSS variables (custom properties) ou bibliotecas de theming (como Styled Components ou Material UI com theming) para aplicar dinamicamente as cores e fontes definidas pelo tenant.
+   * Componentes como cabeçalhos, rodapés e barras laterais renderizarão o logo do tenant dinamicamente.
+3. Backend:
+   * APIs serão expostas no Portal Administrativo Central para que os administradores globais (ou administradores de tenant, dependendo do modelo de permissão) possam configurar as opções de white-labeling.
+   * O serviço de envio de e-mails (integrado com Resend/Brevo 23) selecionará e aplicará o template de e-mail correto com base no tenant do destinatário.
+4. Domínios Personalizados:
+   * Mapeamento: Requer que o tenant configure um registro DNS (geralmente CNAME) apontando seu domínio desejado (e.g., cursos.instituicaoA.com.br) para um domínio controlado pela plataforma Edunéxia (e.g., whitelabel.edunexianext.com).
+   * Roteamento: A infraestrutura de hospedagem (idealmente Vercel ou um setup com Nginx/Caddy em AWS) deve ser capaz de identificar o tenant com base no Host header da requisição HTTP e servir a aplicação com o contexto correto.
+   * SSL: É crucial provisionar e renovar automaticamente certificados SSL/TLS para cada domínio personalizado. Serviços como Let's Encrypt podem ser usados, e plataformas como Vercel geralmente automatizam isso para domínios configurados.4 A implementação disso no Replit pode ser complexa ou inviável, reforçando a necessidade de planejar a migração.6
+5. Site de Marketing White-Label:
+   * Opção A (Dinâmica): O mesmo site Next.js renderiza conteúdo e branding diferentes com base no domínio da requisição. Mais simples de gerenciar o código, mas pode ter implicações de performance e SEO (cache compartilhado, conteúdo dinâmico).
+   * Opção B (Estática por Tenant): Um processo de build/deploy separado é disparado sempre que um tenant configura ou atualiza seu site público. Gera um site estático otimizado para aquele tenant. Melhor performance e SEO, mas maior complexidade operacional (gerenciar múltiplos builds/deployments).
+   * Recomendação: Iniciar com a Opção A pela simplicidade, mas avaliar a Opção B se a performance ou SEO se tornarem críticos.
+A implementação de domínios personalizados com SSL automático é um desafio de infraestrutura significativo.43 Plataformas como Vercel simplificam isso, mas exigem configuração. Gerenciar o ciclo de vida de DNS e SSL adiciona uma camada de complexidade operacional que precisa ser considerada. O white-labeling não é apenas uma camada superficial de CSS; ele permeia a lógica de renderização do frontend, o envio de e-mails, a configuração administrativa e a infraestrutura de rede/domínio.42 Uma seção dedicada no Portal Administrativo será necessária para que os tenants (ou administradores globais) gerenciem essas configurações.46
+3. Design do Banco de Dados (PostgreSQL - Compatível com Neon/Supabase)
+3.1. Modelo Lógico de Dados & Diagrama ERD
+Propósito: Visualizar as principais entidades de dados do sistema Edunéxia NextGen e seus relacionamentos fundamentais, servindo como um mapa conceitual da estrutura de dados.
+Conteúdo:
+O Modelo Entidade-Relacionamento (ERD) de alto nível ilustra as entidades centrais e como elas se conectam. As entidades principais incluem:
+* Gestão de Acesso e Tenant: Institutions (representando os tenants/clientes), Users (usuários globais), InstitutionUsers (vínculo usuário-instituição com papel), Roles, Permissions, RolePermissions.
+* Estrutura Acadêmica: Courses, Disciplines, ContentModules (abstraindo Ebooks, Videos, Quizzes, Assignments), CourseCategories. Inspirado em course_structure do Open edX.8
+* Engajamento do Aluno: Enrollments (matrículas), StudentModuleProgress (progresso granular, similar a courseware_studentmodule 8).
+* Certificação e Documentos: Certificates (gerados, similar a certificates_generatedcertificate 8), DocumentTemplates, DocumentRequests, StudentDocuments (upload por parceiros).
+* Comercial e Financeiro: Leads, SalesFunnels, Communications (logs de emails, WhatsApp), Payments (registros de transações), AsaasSubscriptions (ou GatewaySubscriptions), SplitRules, CommissionReports.
+* Produtividade e Configuração: ProductivityLogs, TenantConfigurations (armazenando white-label, regras de acesso, etc.), AiKnowledgeBase (metadados sobre dados ingeridos para RAG).
+* Parceiros e Polos: PoloAccounts, PartnerAccounts.
+* Biblioteca: LibraryItems, CourseLibraryMapping.
+Figura 3: Diagrama Entidade-Relacionamento (ERD) de Alto Nível - Edunéxia NextGen (Ilustrativo)
+(Nota: Um diagrama ERD detalhado seria inserido aqui, mostrando tabelas e relacionamentos com cardinalidade)
+Este modelo lógico estabelece a fundação para o schema físico detalhado na próxima seção. Ele garante que todas as funcionalidades requeridas tenham suporte de dados e que os relacionamentos entre diferentes partes do sistema (ex: como um pagamento se relaciona a uma matrícula e a um usuário) sejam claramente definidos.
+3.2. Definições Detalhadas do Schema
+Propósito: Fornecer a especificação técnica precisa para a criação das tabelas no banco de dados PostgreSQL, detalhando colunas, tipos de dados, restrições e índices. Este é o blueprint essencial para a camada de persistência.
+Conteúdo:
+A seguir, são apresentadas definições detalhadas para um subconjunto ilustrativo das tabelas chave. O relatório completo conteria a definição para todas as tabelas identificadas no ERD. Os tipos de dados são específicos do PostgreSQL.
+Tabela: institutions
+Propósito: Armazena informações sobre cada tenant (instituição cliente).
+
+
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	institution_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único da instituição (tenant).
+	name
+	VARCHAR(255)
+	NOT NULL
+	Nome da instituição.
+	subdomain
+	VARCHAR(63)
+	UNIQUE, NULLABLE
+	Subdomínio para acesso (e.g., 'minhaescola').edunexianext.com.
+	custom_domain
+	VARCHAR(255)
+	UNIQUE, NULLABLE
+	Domínio personalizado configurado pelo tenant (e.g., 'cursos.minhaescola.com').
+	asaas_api_key_encrypted
+	TEXT
+	NULLABLE
+	Chave API do Asaas do tenant (armazenada criptografada).
+	asaas_wallet_id
+	VARCHAR(255)
+	NULLABLE
+	Wallet ID do Asaas para splits.47
+	is_active
+	BOOLEAN
+	NOT NULL, DEFAULT true
+	Indica se a conta da instituição está ativa.
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data e hora de criação.
+	updated_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data e hora da última atualização (trigger necessário).
+	branding_config
+	JSONB
+	NULLABLE
+	Configurações de white-label (cores, logo URL, fontes).
+	feature_flags
+	JSONB
+	NULLABLE
+	Flags para habilitar/desabilitar funcionalidades por tenant.
+	settings
+	JSONB
+	NULLABLE
+	Outras configurações específicas do tenant (regras de acesso, etc.).
+	Índices: idx_institutions_subdomain, idx_institutions_custom_domain
+	
+
+	
+
+	
+
+	Tabela: users
+Propósito: Armazena informações globais dos usuários, independentemente do tenant.
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	user_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único do usuário no Edunéxia.
+	auth0_user_id
+	VARCHAR(255)
+	UNIQUE, NOT NULL
+	ID do usuário no Auth0.
+	email
+	VARCHAR(255)
+	UNIQUE, NOT NULL
+	Endereço de e-mail do usuário (usado no login).
+	full_name
+	VARCHAR(255)
+	NULLABLE
+	Nome completo do usuário.
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data e hora de criação.
+	updated_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data e hora da última atualização.
+	last_login_at
+	TIMESTAMPTZ
+	NULLABLE
+	Data e hora do último login.
+	Índices: idx_users_email, idx_users_auth0_id
+	
+
+	
+
+	
+
+	Tabela: institution_users
+Propósito: Associa usuários a instituições e define seus papéis (membership).
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	institution_id
+	UUID
+	NOT NULL, REFERENCES institutions(institution_id) ON DELETE CASCADE
+	Chave estrangeira para a instituição.
+	user_id
+	UUID
+	NOT NULL, REFERENCES users(user_id) ON DELETE CASCADE
+	Chave estrangeira para o usuário.
+	role_id
+	UUID
+	NOT NULL, REFERENCES roles(role_id)
+	Chave estrangeira para o papel do usuário na instituição.
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data de associação.
+	
+
+	
+
+	PRIMARY KEY (institution_id, user_id)
+	Chave primária composta.
+	Índices: idx_institution_users_user_id, idx_institution_users_role_id
+	
+
+	
+
+	
+
+	Tabela: courses
+Propósito: Armazena informações sobre os cursos oferecidos por uma instituição.
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	course_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único do curso.
+	institution_id
+	UUID
+	NOT NULL, REFERENCES institutions(institution_id) ON DELETE CASCADE
+	Instituição proprietária do curso (Tenant ID).
+	title
+	VARCHAR(255)
+	NOT NULL
+	Título do curso.
+	description
+	TEXT
+	NULLABLE
+	Descrição detalhada do curso.
+	created_by_user_id
+	UUID
+	NOT NULL, REFERENCES users(user_id)
+	Usuário (professor/admin) que criou o curso.
+	is_published
+	BOOLEAN
+	NOT NULL, DEFAULT false
+	Indica se o curso está visível para alunos.
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data de criação.
+	updated_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data da última atualização.
+	Índices: idx_courses_institution_id, idx_courses_created_by_user_id
+	
+
+	
+
+	
+
+	Tabela: content_modules
+Propósito: Armazena os diferentes tipos de conteúdo dentro de uma disciplina (flexibilidade).
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	module_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único do módulo de conteúdo.
+	discipline_id
+	UUID
+	NOT NULL, REFERENCES disciplines(discipline_id) ON DELETE CASCADE
+	Disciplina à qual este módulo pertence.
+	module_type
+	ENUM('ebook', 'video', 'quiz', 'assignment',...)
+	NOT NULL
+	Tipo do módulo de conteúdo.
+	title
+	VARCHAR(255)
+	NOT NULL
+	Título do módulo (e.g., "Introdução ao Marketing Digital", "Quiz Capítulo 1").
+	config
+	JSONB
+	NOT NULL
+	Configuração específica do tipo (e.g., {"videoUrl": "...", "provider": "youtube"} ou {"quizId": "..."}).
+	order
+	INTEGER
+	NOT NULL, DEFAULT 0
+	Ordem de exibição do módulo dentro da disciplina.
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data de criação.
+	updated_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data da última atualização.
+	Índices: idx_content_modules_discipline_id, idx_content_modules_module_type
+	
+
+	
+
+	
+
+	Tabela: enrollments
+Propósito: Registra a matrícula de um usuário em um curso.
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	enrollment_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único da matrícula.
+	user_id
+	UUID
+	NOT NULL, REFERENCES users(user_id) ON DELETE CASCADE
+	Usuário matriculado.
+	course_id
+	UUID
+	NOT NULL, REFERENCES courses(course_id) ON DELETE CASCADE
+	Curso no qual o usuário está matriculado.
+	institution_id
+	UUID
+	NOT NULL, REFERENCES institutions(institution_id) ON DELETE CASCADE
+	Instituição à qual a matrícula pertence (Tenant ID).
+	enrollment_date
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data da matrícula.
+	status
+	ENUM('pending_payment', 'active', 'completed', 'cancelled')
+	NOT NULL, DEFAULT 'pending_payment'
+	Status atual da matrícula.
+	payment_id
+	UUID
+	NULLABLE, REFERENCES payments(payment_id)
+	Pagamento associado a esta matrícula (se houver).
+	asaas_subscription_id
+	VARCHAR(255)
+	NULLABLE
+	ID da assinatura no Asaas (se for recorrente).
+	access_rule_config
+	JSONB
+	NULLABLE
+	Regras configuráveis para liberação de acesso (e.g., {"release": "immediate"}, {"release": "post_payment"}, {"release": "manual"}).
+	completed_at
+	TIMESTAMPTZ
+	NULLABLE
+	Data de conclusão do curso.
+	
+
+	
+
+	UNIQUE (user_id, course_id)
+	Garante que um usuário só pode se matricular uma vez no mesmo curso.
+	Índices: idx_enrollments_user_id, idx_enrollments_course_id, idx_enrollments_institution_id, idx_enrollments_status, idx_enrollments_asaas_sub_id
+	
+
+	
+
+	
+
+	Tabela: student_module_progress
+Propósito: Rastreia o progresso de um aluno em cada módulo de conteúdo.
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	progress_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único do registro de progresso.
+	enrollment_id
+	UUID
+	NOT NULL, REFERENCES enrollments(enrollment_id) ON DELETE CASCADE
+	Matrícula à qual este progresso se refere.
+	module_id
+	UUID
+	NOT NULL, REFERENCES content_modules(module_id) ON DELETE CASCADE
+	Módulo de conteúdo específico.
+	status
+	ENUM('not_started', 'in_progress', 'completed')
+	NOT NULL, DEFAULT 'not_started'
+	Status do progresso do aluno neste módulo.
+	score
+	NUMERIC(5, 2)
+	NULLABLE
+	Pontuação obtida (para quizzes/avaliações).
+	last_accessed_at
+	TIMESTAMPTZ
+	NULLABLE
+	Última vez que o aluno acessou este módulo.
+	completed_at
+	TIMESTAMPTZ
+	NULLABLE
+	Data em que o aluno completou o módulo.
+	
+
+	
+
+	UNIQUE (enrollment_id, module_id)
+	Garante um único registro de progresso por aluno/módulo.
+	Índices: idx_student_progress_enrollment_id, idx_student_progress_module_id, idx_student_progress_status
+	
+
+	
+
+	
+
+	Tabela: payments
+Propósito: Registra todas as transações financeiras (cobranças únicas ou parcelas de assinatura).
+
+
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	payment_id
+	UUID
+	PRIMARY KEY, DEFAULT gen_random_uuid()
+	Identificador único do pagamento no Edunéxia.
+	institution_id
+	UUID
+	NOT NULL, REFERENCES institutions(institution_id) ON DELETE CASCADE
+	Instituição associada ao pagamento (Tenant ID).
+	user_id
+	UUID
+	NOT NULL, REFERENCES users(user_id)
+	Usuário que realizou/recebeu o pagamento.
+	enrollment_id
+	UUID
+	NULLABLE, REFERENCES enrollments(enrollment_id)
+	Matrícula associada (se for pagamento de curso).
+	amount
+	NUMERIC(10, 2)
+	NOT NULL
+	Valor do pagamento.
+	currency
+	CHAR(3)
+	NOT NULL, DEFAULT 'BRL'
+	Moeda do pagamento (e.g., BRL).
+	gateway
+	ENUM('asaas', 'stripe', 'iugu')
+	NOT NULL
+	Gateway de pagamento utilizado.
+	gateway_charge_id
+	VARCHAR(255)
+	NOT NULL
+	ID da cobrança/transação no gateway.
+	gateway_customer_id
+	VARCHAR(255)
+	NULLABLE
+	ID do cliente no gateway (útil para Asaas manual 48).
+	status
+	ENUM('PENDING', 'RECEIVED', 'CONFIRMED', 'OVERDUE', 'REFUNDED', 'FAILED',...)
+	NOT NULL
+	Status do pagamento (espelha status do gateway, e.g., Asaas 49).
+	billing_type
+	ENUM('BOLETO', 'CREDIT_CARD', 'PIX', 'UNDEFINED')
+	NULLABLE
+	Tipo de cobrança (espelha Asaas 49).
+	due_date
+	DATE
+	NULLABLE
+	Data de vencimento (para boletos).
+	paid_at
+	TIMESTAMPTZ
+	NULLABLE
+	Data e hora em que o pagamento foi confirmado.
+	split_config
+	JSONB
+	NULLABLE
+	Configuração do split para este pagamento específico (se aplicável, e.g., [{"walletId": "...", "percentualValue": 10.0}]).49
+	created_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data de criação do registro.
+	updated_at
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data da última atualização.
+	
+
+	
+
+	UNIQUE (gateway, gateway_charge_id)
+	Garante que cada cobrança do gateway seja registrada apenas uma vez.
+	Índices: idx_payments_institution_id, idx_payments_user_id, idx_payments_enrollment_id, idx_payments_status, idx_payments_gateway_charge_id
+	
+
+	
+
+	
+
+	Tabela: productivity_logs
+Propósito: Armazena eventos de atividade do usuário para o módulo de monitoramento.
+
+
+Coluna
+	Tipo Dado
+	Restrições
+	Descrição
+	log_id
+	BIGSERIAL
+	PRIMARY KEY
+	Identificador único do log.
+	user_id
+	UUID
+	NOT NULL, REFERENCES users(user_id) ON DELETE CASCADE
+	Usuário cuja atividade foi registrada.
+	institution_id
+	UUID
+	NOT NULL, REFERENCES institutions(institution_id) ON DELETE CASCADE
+	Instituição do usuário no momento do log (Tenant ID).
+	timestamp
+	TIMESTAMPTZ
+	NOT NULL, DEFAULT CURRENT_TIMESTAMP
+	Data e hora exata do evento.
+	activity_type
+	ENUM('mouse_move', 'key_press', 'click', 'navigation', 'session_start', 'session_end', 'idle_start', 'idle_end', 'heartbeat', 'api_call')
+	NOT NULL
+	Tipo de atividade detectada.51
+	details
+	JSONB
+	NULLABLE
+	Informações adicionais (e.g., URL da página, elemento clicado - cuidado com privacidade).
+	session_id
+	UUID
+	NOT NULL
+	Identificador da sessão de trabalho do usuário (para agrupar logs).
+	is_productive
+	BOOLEAN
+	NULLABLE
+	Flag (calculado ou inferido) indicando se a atividade foi considerada produtiva (baseado em regras de negócio).
+	Índices: idx_productivity_logs_user_id_timestamp, idx_productivity_logs_institution_id_timestamp, idx_productivity_logs_session_id, idx_productivity_logs_activity_type
+	
+
+	
+
+	
+
+	Este schema detalhado fornece a estrutura necessária para suportar todas as funcionalidades especificadas, incluindo multi-tenancy, flexibilidade de conteúdo, white-labeling e integrações como a do Asaas. A utilização de UUIDs como chaves primárias é uma boa prática para sistemas distribuídos e evita colisões entre tenants. O uso de TIMESTAMPTZ armazena data e hora com fuso horário, importante para aplicações globais. JSONB oferece flexibilidade para configurações e dados menos estruturados. Índices são propostos para otimizar consultas comuns e filtros RLS.
+3.3. Implementação Multi-Tenancy (RLS)
+Propósito: Detalhar como as políticas de Row-Level Security (RLS) do PostgreSQL serão utilizadas para impor o isolamento de dados entre tenants de forma segura e eficiente.
+Conteúdo:
+A estratégia de RLS é fundamental para a segurança do modelo de schema compartilhado. As políticas RLS atuam como filtros automáticos aplicados pelo próprio banco de dados a cada consulta, garantindo que um usuário de uma instituição não possa acidentalmente ou maliciosamente acessar dados de outra.
+Passos de Implementação:
+1. Habilitação de RLS: Para cada tabela que contém dados específicos de tenant (e.g., courses, enrollments, payments, productivity_logs), o RLS deve ser habilitado:
+SQL
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE courses FORCE ROW LEVEL SECURITY; -- Aplica RLS também ao dono da tabela
+
+A opção FORCE ROW LEVEL SECURITY é recomendada para garantir que mesmo usuários com privilégios elevados (mas não superusuários) estejam sujeitos às políticas, prevenindo bypass acidental.30
+2. Criação de Políticas: Políticas USING serão criadas para definir as condições de acesso. A condição mais fundamental é a verificação do institution_id.
+   * Política de Isolamento Básico (Leitura): Garante que usuários só vejam dados de sua própria instituição.
+SQL
+CREATE POLICY select_tenant_isolation ON courses
+FOR SELECT
+USING (institution_id = current_setting('app.current_tenant_id')::uuid);
+(Baseado nos conceitos de 30)
+   * Política de Isolamento Básico (Escrita/Modificação): Garante que usuários só possam inserir/atualizar/deletar dados em sua própria instituição.
+SQL
+CREATE POLICY modify_tenant_isolation ON courses
+FOR ALL -- Aplica a INSERT, UPDATE, DELETE
+USING (institution_id = current_setting('app.current_tenant_id')::uuid)
+WITH CHECK (institution_id = current_setting('app.current_tenant_id')::uuid);
+A cláusula WITH CHECK é crucial para INSERT e UPDATE, garantindo que os dados sendo inseridos ou modificados também pertençam ao tenant correto.
+   * Políticas Baseadas em Papel (Exemplo - Admin): Permitir que administradores da instituição vejam todos os cursos daquela instituição.
+SQL
+-- Assumindo que já existe a política de isolamento básico
+-- Esta política adicional pode não ser necessária se a lógica for combinada
+-- ou se o acesso for controlado na aplicação. Mas ilustra a possibilidade.
+CREATE POLICY admin_access ON courses
+FOR SELECT
+USING (
+   institution_id = current_setting('app.current_tenant_id')::uuid AND
+   current_setting('app.current_role') = 'admin'
+);
+
+   * Políticas Complexas (Exemplo - Professor): Permitir que um professor veja o progresso (student_module_progress) apenas dos alunos matriculados (enrollments) nos cursos (courses) que ele criou.
+SQL
+CREATE POLICY professor_student_progress_access ON student_module_progress
+FOR SELECT
+USING (
+   EXISTS (
+       SELECT 1
+       FROM enrollments e
+       JOIN courses c ON e.course_id = c.course_id
+       WHERE e.enrollment_id = student_module_progress.enrollment_id
+         AND c.created_by_user_id = current_setting('app.current_user_id')::uuid
+         AND e.institution_id = current_setting('app.current_tenant_id')::uuid -- Redundante se enrollments já tem RLS, mas seguro
+   )
+);
+Este exemplo demonstra a complexidade potencial. A performance de políticas com subqueries ou joins depende fortemente da indexação adequada das colunas usadas nas condições (enrollment_id, course_id, created_by_user_id, institution_id).31
+      3. Definição do Contexto da Sessão: O backend Node.js, ao receber uma requisição autenticada, deve extrair as informações relevantes (user_id, institution_id, role) do token JWT (fornecido pelo Auth0) e configurar as variáveis de sessão do PostgreSQL antes de executar qualquer consulta de dados para aquela requisição.
+JavaScript
+// Exemplo conceitual no backend Node.js com um cliente Postgres (e.g., 'pg')
+async function handleRequest(req, res) {
+ const token = req.auth; // Supõe que o middleware de autenticação populou isso
+ const tenantId = token.tenant_id;
+ const userId = token.user_id;
+ const role = token.role;
+
+ const client = await pool.connect(); // Obter conexão do pool
+ try {
+   // Definir contexto RLS para esta transação/sessão
+   await client.query(`SET LOCAL app.current_tenant_id = $1`, [tenantId]);
+   await client.query(`SET LOCAL app.current_user_id = $1`, [userId]);
+   await client.query(`SET LOCAL app.current_role = $1`, [role]);
+
+   // Executar consultas de negócios (ex: buscar cursos)
+   // A RLS será aplicada automaticamente pelo PostgreSQL
+   const result = await client.query('SELECT * FROM courses');
+
+   res.json(result.rows);
+ } finally {
+   // Liberar a conexão de volta para o pool
+   // As configurações SET LOCAL são automaticamente descartadas
+   client.release();
+ }
+}
+
+A gestão das políticas RLS durante as migrações de schema é um ponto de atenção. Ferramentas de migração devem ser executadas com um usuário que tenha permissão para alterar ou recriar as políticas, ou as políticas podem precisar ser temporariamente desabilitadas durante a migração. Testar as políticas RLS exaustivamente com diferentes papéis e tenants é crucial para garantir que o isolamento funcione como esperado e que não haja regressões.
+3.4. Flexibilidade do Modelo de Dados
+Propósito: Explicar como o design do schema do banco de dados acomoda requisitos de flexibilidade, como estruturas de curso variáveis e diferentes tipos de conteúdo, sem exigir alterações frequentes na estrutura das tabelas.
+Conteúdo:
+A plataforma Edunéxia NextGen requer flexibilidade para suportar diferentes modelos pedagógicos e tipos de conteúdo, permitindo que as instituições personalizem suas ofertas. O schema foi projetado com isso em mente:
+         1. Uso Estratégico de JSONB: Campos do tipo JSONB são utilizados para armazenar dados semi-estruturados ou configurações que podem variar significativamente entre instâncias ou tipos. Exemplos incluem:
+         * content_modules.config: Armazena metadados específicos de cada tipo de módulo (URL de vídeo, link de GDrive/Dropbox, estrutura de quiz, conteúdo de ebook gerado por IA, etc.). Isso permite adicionar novos tipos de módulos com configurações distintas sem alterar a estrutura da tabela content_modules, apenas adicionando um novo valor ao ENUM module_type e tratando a nova configuração na aplicação.
+         * institutions.branding_config e tenant_configurations.white_label_settings: Armazenam as diversas opções de personalização visual (cores, logos, fontes) que podem variar por tenant.
+         * enrollments.access_rule_config: Permite definir regras flexíveis para liberação de acesso ao curso (imediato, pós-pagamento, manual) através de uma estrutura JSON configurável pelo administrador.
+         * payments.split_config: Define as regras de split (percentual ou fixo, múltiplos destinatários) de forma flexível por pagamento.
+         2. Estrutura Modular de Conteúdo: A relação entre Disciplines e ContentModules é de um-para-muitos. Isso permite que uma disciplina contenha um número variável de módulos de qualquer tipo suportado. Uma disciplina pode ter dois e-books e dez vídeos, enquanto outra pode ter um e-book, cinco vídeos e dois quizzes, simplesmente adicionando as linhas correspondentes na tabela content_modules com o discipline_id apropriado e definindo o order para exibição. Isso atende diretamente à necessidade de flexibilidade na quantidade de e-books ou vídeos por disciplina, contrastando com uma estrutura rígida onde haveria colunas fixas como ebook1_url, ebook2_url, etc..53
+         3. Configurações por Tenant: A tabela institutions ou tenant_configurations permite armazenar configurações específicas por tenant (via campos JSONB ou colunas dedicadas), como regras de negócio, limites, ou flags de funcionalidades (feature_flags), permitindo adaptar o comportamento da plataforma sem alterar o código base principal para cada cliente.
+Essa abordagem combina a robustez e a integridade relacional do PostgreSQL para as entidades e relacionamentos principais com a flexibilidade do JSONB para atributos e configurações variáveis, criando um modelo de dados adaptável às necessidades evolutivas da plataforma e de seus clientes.
+3.5. Suporte do Schema ao White-Labeling
+Propósito: Demonstrar como as tabelas e colunas definidas no schema do banco de dados suportam diretamente as funcionalidades de white-labeling.
+Conteúdo:
+O suporte ao white-labeling está embutido no schema através de campos dedicados que armazenam as configurações de personalização de cada tenant:
+         1. Tabela institutions ou tenant_configurations: Conforme detalhado na Seção 3.2, esta(s) tabela(s) contêm campos cruciais:
+         * branding_config (JSONB) ou white_label_settings (JSONB): Este campo armazenará um objeto JSON contendo os elementos visuais personalizáveis, como:
+         * logoUrl: URL do logo da instituição.
+         * faviconUrl: URL do favicon.
+         * primaryColor: Código hexadecimal da cor primária.
+         * secondaryColor: Código hexadecimal da cor secundária.
+         * fontFamily: Nome da fonte selecionada.
+         * customCssSnippet: (Opcional) Pequeno trecho de CSS para ajustes finos.
+         * custom_domain (VARCHAR): Armazena o domínio personalizado configurado pelo tenant (e.g., cursos.instituicaoA.com.br).
+         * subdomain (VARCHAR): Armazena o subdomínio escolhido pelo tenant (e.g., instituicaoA).
+         2. Recuperação e Aplicação:
+         * O frontend, ao identificar o tenant (pelo domínio/subdomínio ou após login), fará uma requisição ao backend para obter essas configurações de branding_config.
+         * Esses valores serão usados para popular variáveis CSS, selecionar URLs de imagens e configurar a biblioteca de theming, aplicando o branding do tenant dinamicamente.42
+         * O backend utilizará o custom_domain ou subdomain para roteamento e para selecionar os templates de e-mail corretos.
+Essa estrutura permite que cada tenant configure sua própria identidade visual e ponto de acesso, cujos dados são persistidos no banco de dados e utilizados pela aplicação para renderizar a experiência personalizada, conforme discutido na arquitetura de white-labeling (Seção 2.4).
+3.6. Campos de Integração Asaas
+Propósito: Identificar e explicar os campos específicos no schema do banco de dados que são necessários para vincular os dados do Edunéxia NextGen com as entidades correspondentes no gateway de pagamento Asaas, especialmente para suportar fluxos de matrícula manual e reconciliação.
+Conteúdo:
+Para garantir uma integração robusta com o Asaas, tanto para pagamentos iniciados por link quanto para aqueles criados manualmente via API pelo administrador, o schema inclui campos específicos para armazenar identificadores do Asaas:
+         1. Tabela payments:
+         * gateway (ENUM): Identifica que o gateway é 'asaas'.
+         * gateway_charge_id (VARCHAR, UNIQUE): Armazena o ID único da cobrança (payment_id na API Asaas) retornado pelo Asaas ao criar uma cobrança (seja via link ou API).11 Este campo é crucial para correlacionar webhooks de status de pagamento (e.g., PAYMENT_RECEIVED, PAYMENT_REFUNDED 49) enviados pelo Asaas com o registro de pagamento correspondente no Edunéxia.
+         * gateway_customer_id (VARCHAR, NULLABLE): Armazena o ID do cliente (customer_id) no Asaas. Isso é particularmente útil no fluxo de matrícula manual, onde o administrador pode primeiro criar o cliente no Asaas via API (POST /customers 48) e depois criar a cobrança associada a ele. Armazenar este ID permite futuras interações com o cliente no Asaas.
+         * status (ENUM): Espelha os status relevantes do Asaas (e.g., PENDING, RECEIVED, OVERDUE, REFUNDED 49) para manter a consistência e facilitar a reconciliação.
+         * billing_type (ENUM): Espelha o tipo de cobrança do Asaas (BOLETO, CREDIT_CARD, PIX 49).
+         * split_config (JSONB): Embora armazene a configuração do split enviada ao Asaas, a confirmação e o status do split dependem de webhooks ou consultas à API Asaas usando o gateway_charge_id.
+         2. Tabela enrollments:
+         * asaas_subscription_id (VARCHAR, NULLABLE): Se a matrícula estiver vinculada a uma assinatura recorrente no Asaas, este campo armazena o ID da assinatura (subscription_id) retornado pelo Asaas.54 Isso permite gerenciar o ciclo de vida da assinatura (cancelamentos, atualizações) através de webhooks ou API calls direcionadas a essa assinatura específica.
+         3. Tabela institutions:
+         * asaas_api_key_encrypted (TEXT, NULLABLE): Armazena a chave API Asaas específica do tenant (se cada tenant tiver sua própria conta Asaas ou subconta gerenciada). Deve ser criptografada por segurança.
+         * asaas_wallet_id (VARCHAR, NULLABLE): Armazena o walletId da conta Asaas do tenant, necessário para configurar splits onde o tenant principal ou outros parceiros recebem uma parte do pagamento.47
+Esses campos criam a "ponte" entre os registros internos do Edunéxia e as entidades correspondentes no Asaas. Quando um webhook do Asaas chega (e.g., notificando que um pagamento com payment_id = 'pay_123' foi recebido), o backend do Edunéxia pode usar esse gateway_charge_id para encontrar o registro na tabela payments, identificar o user_id e enrollment_id associados, e então atualizar o status da matrícula para 'active', liberando o acesso ao curso. Isso funciona independentemente de o pagamento ter sido iniciado por um link gerado automaticamente ou por uma cobrança criada manualmente pelo administrador via API.
+4. Análise Comparativa (Open edX, Kajabi, Site Exemplo)
+Propósito: Extrair lições práticas, modelos de interface, fluxos de usuário e estratégias comerciais das plataformas de referência (Open edX, Kajabi) e do site de inspiração fornecido, para informar o design e as funcionalidades do Edunéxia NextGen.
+Conteúdo:
+A análise das plataformas de referência ajuda a posicionar o Edunéxia NextGen, combinando a robustez pedagógica com a agilidade comercial.
+         * Open edX (7):
+         * Arquitetura e Funcionalidades: É uma plataforma de código aberto focada primariamente na entrega e gestão de cursos online em larga escala. Sua arquitetura separa claramente o ambiente de autoria (Studio) do ambiente de aprendizagem (LMS).7 Utiliza componentes independentes (IDAs) para funcionalidades como discussões e depende de tarefas em background (Celery) para operações pesadas como correção e emissão de certificados.7 A estrutura de dados é relacional (MySQL/PostgreSQL) e bem definida para gerenciar usuários (auth_user), matrículas (student_courseenrollment), progresso do aluno em módulos (courseware_studentmodule), a estrutura hierárquica dos cursos (course_structure) e certificados (certificates_generatedcertificate).8
+         * Interface e Fluxo: A interface é funcional, mas tradicionalmente mais focada na entrega de conteúdo acadêmico do que em apelo visual moderno ou funis de venda. O fluxo do aluno é centrado na navegação pela estrutura do curso e na conclusão de atividades. O fluxo do professor (Studio) é focado na criação e organização de conteúdo dentro dessa estrutura hierárquica.
+         * Lições para Edunéxia: Fornece um modelo comprovado para a estrutura acadêmica central (cursos, disciplinas, módulos), rastreamento detalhado do progresso do aluno e gerenciamento de certificados. Sua arquitetura modular 7 valida a abordagem modular planejada para o Edunéxia, dada a complexidade funcional. A necessidade de tarefas em background para processos como emissão de certificados em lote também é um aprendizado relevante. No entanto, sua complexidade e foco estritamente educacional indicam a necessidade de complementá-lo com abordagens mais comerciais.
+         * Kajabi (9):
+         * Arquitetura e Funcionalidades: É uma plataforma comercial "tudo-em-um" projetada para criadores de conteúdo venderem cursos online, memberships, coaching e outros produtos digitais.9 Seu forte está nas ferramentas de marketing e vendas integradas: construtor de funis de marketing (com templates e copy pré-escrita) 9, construtor de websites e landing pages, email marketing e automações, processamento de pagamentos integrado (sem taxa sobre receita, apenas processamento) 9, e gestão de afiliados.10 Embora permita a criação de cursos, seu foco é menos na pedagogia profunda e mais na comercialização e experiência do cliente.10
+         * Interface e Fluxo: A interface é geralmente moderna e focada na facilidade de uso para o criador configurar e vender seus produtos. O fluxo de vendas é central, com funis projetados para converter visitantes em clientes.9 A experiência do aluno é tipicamente mais simples que a de um LMS acadêmico complexo.
+         * Lições para Edunéxia: É a principal inspiração para o site público de marketing/vendas, a estrutura de venda modular de planos, a integração de CRM e funis de venda (WhatsApp, email), e a ideia de uma plataforma que simplifica o lado comercial da educação online. A abordagem "tudo-em-um" 9 ressoa com a visão do Edunéxia de ser um ecossistema completo. A facilidade de criação de páginas e funis 10 é um objetivo desejável para a usabilidade do Edunéxia, especialmente nos portais de administração e professor.
+         * Site de Exemplo (edunexiareplit-ai-2-magonder.replit.app 57):
+         * Análise: O site fornecido como inspiração estava inacessível no momento da análise.57
+         * Inferência (baseada na descrição do usuário): Assume-se que este site reforça a preferência por uma estética e modelo de vendas inspirado no Kajabi, provavelmente apresentando ofertas de forma modular e com um design moderno.
+         * Lições para Edunéxia: Confirma a direção visual e comercial desejada pelo usuário, alinhada com a análise do Kajabi. A estrutura de venda modular deve ser um pilar do site público.
+Síntese e Implicações para Edunéxia NextGen:
+O Edunéxia NextGen se posiciona em uma interseção interessante. Ele precisa da profundidade e estrutura acadêmica sugeridas pelo Open edX para ser um LMS/CMS credível, mas requer a agilidade comercial, as ferramentas de marketing integradas e a facilidade de uso na gestão de vendas inspiradas pelo Kajabi.
+Essa combinação exige um design cuidadoso. A arquitetura modular é essencial para gerenciar a complexidade de integrar funcionalidades tão diversas (LMS, CMS, CRM, Finanças, IA, Produtividade). A interface do usuário, embora buscando um design moderno (cards na home, menus laterais internos), deve organizar essa vasta gama de funcionalidades de forma intuitiva para diferentes perfis de usuário (aluno, professor, admin, polo, parceiro). O desafio é evitar a sobrecarga de informação, garantindo que cada portal seja focado em suas tarefas principais, mas mantendo uma experiência coesa.58 A flexibilidade na estrutura do curso (número variável de módulos) e nas regras de acesso, juntamente com o white-labeling, são diferenciadores importantes que vão além do que Kajabi ou Open edX oferecem nativamente de forma integrada. A integração manual com Asaas é um requisito específico que precisa ser tratado como um fluxo de primeira classe na interface administrativa.
+5. Design de Portal & Experiência do Usuário (UI/UX)
+5.1. Arquitetura da Informação & Fluxos de Navegação
+Propósito: Definir a estrutura organizacional do conteúdo e as principais jornadas do usuário através dos diferentes portais e do site público, garantindo uma navegação lógica e intuitiva.
+Conteúdo:
+Uma arquitetura de informação bem definida é crucial para que os usuários encontrem o que precisam eficientemente dentro da complexa plataforma Edunéxia NextGen.60
+Mapas de Site (Estrutura Hierárquica - Exemplos):
+         * Site Público:
+         * Homepage (Visão Geral, Módulos/Planos em Destaque, Depoimentos, CTA)
+         * Funcionalidades (Detalhes por Módulo: LMS, CMS, CRM, etc.)
+         * Planos/Preços (Tabela Comparativa Modular, Links Asaas por Plano)
+         * Sobre Nós
+         * Página de apresentação dos módulos 
+         * Contato
+         * Blog
+         * Login (Redireciona para Auth0/Página de Login)
+         * Portal do Aluno:
+         * Dashboard (Cards: Meus Cursos, Progresso Recente, Avisos, Financeiro Rápido)
+         * Meus Cursos (Lista/Grid de Cursos Matriculados)
+         * Página do Curso (Visão Geral, Disciplinas)
+         * Página da Disciplina (Módulos: Vídeos, Ebooks, Quizzes, Tarefas)
+         * Player/Visualizador de Conteúdo (Vídeo, Ebook, Quiz, Tarefa)
+         * Progresso (Detalhes por Curso/Disciplina)
+         * Financeiro (Histórico de Pagamentos, Boletos Pendentes - via Asaas)
+         * Documentos (Solicitar Certidão/Histórico, Ver Status)
+         * Biblioteca (Materiais Complementares com suporte para uploads de ebooks digitais e incorporaação de links de ebooks)
+         * Mensagens (Caixa de Entrada/Saída com Professores)
+         * Perfil/Configurações
+         * Portal do Professor:
+         * Dashboard (Cards: Meus Cursos, Alunos Recentes, Tarefas Pendentes, Avisos)
+         * Meus Cursos (Criar Novo, Excluir e Gerenciar Existentes)
+         * Editor de Curso (Configurações Gerais, Estrutura - Adicionar/Ordenar/Editar/Excluir Disciplinas)
+         * Editor de Disciplina (Adicionar/Ordenar/Editar/Excluir Módulos)
+         * Editor de Módulo (Seleção de Tipo: Ebook, Vídeo, Quiz, Tarefa)
+         * Criador de Ebook (WYSIWYG / Geração IA)
+         * Link/Upload de Vídeo (G Drive, Vimeo, YouTube, Upload Direto)
+         * Construtor de Quiz
+         * Configuração de Tarefa (Instruções, Turnitin)
+         * Alunos (Visão Geral por Curso, Progresso Individual)
+         * Avaliações (Corrigir Tarefas, Ver Notas de Quizzes)
+         * Mensagens (Caixa de Entrada/Saída com Alunos)
+         * Perfil/Configurações
+         * Portal Admin Central: (Estrutura mais complexa, com menus laterais bem definidos)
+         * Dashboard Global (KPIs Chave: Matrículas, Receita, Tenants Ativos, Uso da Plataforma)
+         * Gestão de Tenants (Instituições) (Listar, Criar, Editar, Configurar White-Label, Definir Limites/Planos)
+         * Gestão de Usuários (Todos os Tenants) (Buscar, Ver Detalhes, Gerenciar Papéis Globais)
+         * Gestão Acadêmica Global (Catálogo de Cursos Mestre - se aplicável, Configurações Globais)
+         * Gestão Comercial (Leads Globais, Configurações de Funil Padrão)
+         * Gestão Financeira (Visão Geral de Receita, Relatórios de Inadimplência, Configuração de Gateways, Gestão de Splits Padrão)
+         * Gestão de Polos e Parceiros (Listar, Aprovar, Configurar Comissões)
+         * Fila de Aprovação de Certificados (Solicitações de Parceiros)
+         * Monitoramento de Produtividade (Dashboard Agregado, Relatórios por Tenant/Equipe/Usuário)
+         * Configurações do Sistema (Integrações Globais, Templates Padrão)
+         * Portal do Polo: (Interface Simplificada)
+         * Dashboard (Leads Recebidos, Matrículas Efetivadas, Comissão Pendente/Paga)
+         * Meus Alunos (Lista Filtrada por Status)
+         * Relatórios de Comissão
+         * Gestão de Documentos (Visualizar/Aprovar documentos dos seus alunos)
+         * Portal do Parceiro de Certificação:
+         * Dashboard (Alunos Cadastrados, Solicitações Pendentes/Aprovadas)
+         * Cadastrar Aluno (Formulário Simplificado para Certificação)
+         * Gerenciar Alunos (Upload de Documentos por Aluno)
+         * Solicitar Certificação (Seleção de Alunos, Lote)
+         * Pagamentos (Status de Pagamento das Taxas de Certificação)
+Fluxos de Usuário Chave (Diagramas de Sequência ou Fluxogramas):
+         * Matrícula de Aluno (Auto-serviço com Pagamento): Visitante -> Site Público -> Seleciona Plano -> Clica Link Asaas -> Paga no Asaas -> Webhook Asaas -> Backend Edunéxia -> Cria Usuário/Matrícula -> Libera Acesso -> Email Boas-Vindas.
+         * Matrícula de Aluno (Manual via Admin/Asaas): Admin -> Portal Admin -> Formulário Matrícula Manual -> Insere Dados Aluno -> Botão "Gerar Cobrança Asaas" -> Backend chama API Asaas (POST /customers, POST /payments) -> Armazena IDs Asaas, Status Pendente -> Admin informa Aluno -> Aluno Paga Boleto/Pix -> Webhook Asaas -> Backend Edunéxia -> Atualiza Status Matrícula -> Libera Acesso.
+         * Criação de Curso (Professor): Professor -> Portal Professor -> Criar Curso -> Define Título/Descrição -> Adiciona Disciplina -> Adiciona Módulo Ebook -> Usa Editor WYSIWYG/IA -> Salva -> Adiciona Módulo Vídeo -> Cola Link YouTube -> Salva -> Publica Curso.
+         * Configuração White-Label (Admin): Admin -> Portal Admin -> Gestão Tenants -> Seleciona Tenant -> Aba White-Label -> Upload Logo -> Seleciona Cores -> Define Domínio Customizado -> Salva -> Backend atualiza tenant_configurations.
+         * Solicitação de Certificado (Parceiro): Parceiro -> Portal Parceiro -> Gerenciar Alunos -> Seleciona Aluno -> Upload Documentos -> Solicitar Certificação -> Admin Central -> Fila Aprovação -> Revisa Documentos -> Aprova -> Backend gera Certificado -> Notifica Parceiro/Aluno.
+         * Monitoramento de Atividade (Funcionário): Funcionário Logado -> Navega/Digita -> JS envia 'heartbeat' -> Para por 10min -> JS envia 'idle_start' -> Backend registra -> Funcionário move mouse -> JS envia 'idle_end' -> Backend registra -> Admin/Gestor -> Portal Admin -> Dashboard Produtividade -> Visualiza Tempo Produtivo/Ocioso.
+Estes mapas e fluxos garantem que a navegação seja consistente e que as tarefas críticas possam ser completadas de forma eficiente pelos diferentes usuários.58
+5.2. Wireframes/Mockups para Telas Chave
+Propósito: Visualizar a disposição dos elementos (layout), componentes de interface e o fluxo visual para as telas mais importantes de cada portal e do site público.
+Conteúdo:
+Serão desenvolvidos wireframes de média a alta fidelidade ou mockups visuais para as seguintes telas (lista não exaustiva):
+         * Site Público:
+         * Homepage: Design moderno, proposta de valor clara, seção de "cards" apresentando os módulos/soluções principais (LMS, CRM, etc.), prova social (depoimentos), CTA principal ("Comece Agora" ou "Ver Planos"). Inspiração em Kajabi 9 e designs contemporâneos.61
+         * Página de Planos/Preços: Tabela comparativa clara dos planos modulares, destacando funcionalidades incluídas em cada um. Botões "Assinar Agora" proeminentes, vinculados aos links de pagamento Asaas correspondentes.
+         * Checkout (via Asaas): O fluxo será majoritariamente gerenciado pelo Asaas Checkout 11, mas a página de confirmação no Edunéxia (após redirecionamento ou via webhook) deve ser desenhada.
+         * Elementos Compartilhados:
+         * Página de Login: Interface limpa, integrada com Auth0 Universal Login (opção de customização via Auth0).14 Campos para email/senha, opções de login social (Google, etc.), link para recuperação de senha.
+         * Dashboard Shell: Estrutura base para todos os portais logados. Cabeçalho com logo (white-labeled), nome do usuário, notificações, menu de perfil. Corpo principal com layout de "cards" modulares para acesso rápido às principais seções/funcionalidades daquele portal. Menu lateral esquerdo (ou superior) para navegação dentro do módulo/seção ativa.58
+         * Portal do Aluno:
+         * Dashboard: Cards para "Meus Cursos" (com barra de progresso), "Próximas Atividades", "Avisos Recentes", "Meu Financeiro" (saldo/boletos).
+         * Player de Curso: Layout limpo e focado no conteúdo.60 Área principal para vídeo/ebook/quiz. Navegação clara (anterior/próximo módulo, índice da disciplina/curso no menu lateral). Controles de vídeo padrão (play/pause, volume, tela cheia, legendas - se disponíveis).63 Barra de progresso visível. Área para discussões/comentários (se aplicável). Design responsivo (mobile-first).60
+         * Visualização Financeira: Lista de pagamentos realizados, boletos pendentes com link para pagamento (Asaas), datas de vencimento.
+         * Formulário de Solicitação de Documento: Campos para selecionar tipo de documento (Certidão, Histórico), justificativa (opcional), botão de envio.
+         * Portal do Professor:
+         * Dashboard: Cards para "Cursos Ativos", "Alunos com Atividades Pendentes", "Mensagens Não Lidas", "Criar Novo Curso".
+         * Editor de Curso/Disciplina/Módulo: Interface intuitiva com drag-and-drop (se possível) para reordenar disciplinas/módulos. Formulários claros para adicionar títulos, descrições. Interface específica para cada tipo de módulo:
+         * Ebook: Editor WYSIWYG rico em texto (59 - similar a TinyMCE/CKEditor) OU interface para fornecer prompt/contexto para geração via IA.
+         * Vídeo: Campo para colar URL (YouTube/Vimeo) com preview OU interface de upload para GDrive/Dropbox/Bunny.net.
+         * Quiz: Interface para adicionar questões (múltipla escolha), definir opções, marcar resposta correta, configurar pontuação/feedback.
+         * Dashboard de Desempenho do Aluno: Tabela/gráficos mostrando progresso geral dos alunos no curso, notas em avaliações, identificação de alunos com dificuldades.
+         * Portal Admin Central:
+         * Gestão de Tenants: Tabela de instituições com filtros/busca. Botões para editar, desativar, acessar configurações (incluindo White-Label).
+         * Configuração White-Label: Formulário com campos para upload de logo, seleção de cores (color picker), input para fontes, configuração de domínio/subdomínio.42 Preview das alterações.
+         * Dashboard de Produtividade: Gráficos mostrando tempo produtivo vs. ocioso (agregado, por equipe, por usuário), principais atividades/aplicativos (se rastreado), tendências ao longo do tempo. Filtros por data, equipe, usuário.64
+         * Interface de Matrícula Manual (Asaas): Formulário para buscar/criar usuário, selecionar curso, definir preço (se customizável), botão "Criar Cobrança Asaas". Feedback visual do status da criação da cobrança.
+         * Portal do Polo:
+         * Dashboard: KPIs claros (Leads, Matrículas, Comissão). Lista de leads recentes com status.
+         * Lista de Alunos: Tabela com alunos vinculados ao polo, status da matrícula, progresso (resumido).
+         * Portal do Parceiro:
+         * Upload de Documentos: Interface clara por aluno para fazer upload dos arquivos necessários (RG, CPF, Histórico Escolar, etc.). Indicação de quais documentos são obrigatórios.
+         * Formulário de Solicitação de Certificação: Seleção de alunos elegíveis (com documentos aprovados), opção de solicitação em lote.
+O design priorizará a clareza, a consistência e a eficiência.63 A abordagem de cards no dashboard inicial de cada portal visa fornecer um acesso rápido às informações e ações mais relevantes para aquele perfil de usuário. O menu lateral dentro de cada módulo/seção principal ajudará a organizar funcionalidades mais específicas sem poluir a navegação global. A responsividade (mobile-first) será garantida em todas as telas.60 Um design system robusto será fundamental para manter a consistência visual e funcional entre os múltiplos portais e o site público.58
+5.3. Guia de Estilo UI
+Propósito: Definir a linguagem visual e os padrões de interação da plataforma Edunéxia NextGen para garantir consistência, usabilidade e uma identidade de marca coesa e moderna.
+Conteúdo:
+Este guia servirá como referência para desenvolvedores e designers durante a implementação.
+         * Filosofia de Design: Moderno, limpo, profissional, focado na clareza e facilidade de uso. Priorizar a experiência do usuário (UX) e a acessibilidade.59
+         * Paleta de Cores:
+         * Primária: Definir uma cor principal (e.g., um tom de azul ou verde associado à educação e tecnologia) e suas variações (claro, escuro).
+         * Secundária: Uma cor de destaque para CTAs e elementos importantes.
+         * Neutras: Tons de cinza para texto, fundos, bordas.
+         * Feedback: Cores padrão para sucesso (verde), erro (vermelho), aviso (amarelo), informação (azul).
+         * Acessibilidade: Garantir que todas as combinações de cores de texto/fundo atendam aos requisitos mínimos de contraste (WCAG AA).
+         * Tipografia:
+         * Fontes: Selecionar uma ou duas fontes sans-serif modernas e legíveis para títulos e corpo de texto (e.g., Inter, Poppins, Montserrat).58 Evitar fontes excessivamente estilizadas.
+         * Hierarquia: Definir tamanhos e pesos (font-weight) claros para diferentes níveis de títulos (H1, H2, H3...), parágrafos, legendas, labels de formulário.63
+         * Espaçamento: Definir regras consistentes para line-height e espaçamento entre parágrafos para garantir boa legibilidade.
+         * Iconografia:
+         * Estilo: Utilizar um conjunto de ícones consistente (e.g., Material Icons, Feather Icons, Font Awesome) com um estilo unificado (outline ou solid).
+         * Uso: Ícones devem ser usados para reforçar o significado de ações ou informações, não como decoração pura. Sempre que possível, acompanhar ícones com texto (label) para clareza.59
+         * Componentes de UI:
+         * Botões: Definir estilos para botões primários, secundários, de texto, com ícone. Incluir estados :hover, :focus, :active, :disabled.
+         * Formulários: Estilos consistentes para inputs de texto, textareas, selects, checkboxes, radio buttons. Incluir validação visual clara (estados de erro/sucesso). Labels sempre visíveis.
+         * Cards: Design padrão para os cards modulares dos dashboards. Incluir variações para diferentes tipos de conteúdo (curso, KPI, aviso).
+         * Menus: Estilo para navegação principal (superior/lateral) e menus dropdown. Indicação clara do item ativo.
+         * Tabelas: Design limpo e legível para exibição de dados tabulares. Incluir opções de ordenação, paginação e filtros.
+         * Modais/Pop-ups: Estilo consistente para janelas modais usadas para confirmações, formulários rápidos ou informações adicionais.
+         * Layout e Grid:
+         * Utilizar um sistema de grid responsivo (e.g., baseado em 12 colunas) para garantir alinhamento e consistência nos layouts.
+         * Definir regras de espaçamento (padding, margin) consistentes usando uma escala (e.g., múltiplos de 4px ou 8px).
+         * Responsividade:
+         * Adotar uma abordagem Mobile-First.60 Projetar primeiro para telas menores e depois adaptar para telas maiores.
+         * Definir breakpoints claros para ajustar o layout e o tamanho dos elementos em diferentes tamanhos de tela (mobile, tablet, desktop).
+         * Acessibilidade (WCAG):
+         * Garantir navegação completa via teclado.
+         * Utilizar atributos ARIA apropriados para componentes customizados.
+         * Fornecer alternativas textuais para imagens (alt text).62
+         * Garantir contraste de cores adequado.63
+         * Estrutura semântica de HTML correta (uso adequado de headings, lists, etc.).62
+Este guia de estilo será um documento vivo, atualizado conforme a plataforma evolui, garantindo que a experiência do usuário permaneça coesa e de alta qualidade.
+5.4. Contrato de Comunicação Frontend-Backend
+Propósito: Definir formalmente como as aplicações frontend (portais, site público) irão interagir com os serviços backend, especificando o formato das requisições, respostas e mecanismos de autenticação, para garantir uma integração suave e desacoplada.
+Conteúdo:
+Uma comunicação clara e padronizada entre o frontend e o backend é essencial para evitar bugs de integração e permitir o desenvolvimento paralelo.
+         * Estilo da API: RESTful será o estilo predominante para a maioria das interações CRUD (Create, Read, Update, Delete) e ações.
+         * Justificativa: REST é amplamente compreendido, bem suportado por ferramentas e bibliotecas em ambos frontend (fetch API, Axios) e backend (Express.js/Node.js), e adequado para a maioria das operações baseadas em recursos (cursos, usuários, pagamentos).
+         * Consideração: GraphQL pode ser avaliado para casos de uso específicos que envolvam a busca de dados complexos e aninhados com requisitos de campos variáveis, como dashboards analíticos complexos no Portal Admin Central. No entanto, a complexidade adicional de implementar e manter um servidor GraphQL sugere começar com REST.
+         * API Gateway: Um único ponto de entrada (e.g., api.edunexianext.com/v1/) será usado para todas as requisições do frontend.
+         * Benefícios: Simplifica a configuração do frontend (um único base URL), centraliza a autenticação (validação de JWT), aplica rate limiting global, facilita o roteamento para os serviços/módulos backend apropriados, e pode agregar respostas se necessário.
+         * Autenticação:
+         * Todas as requisições para endpoints protegidos devem incluir um JSON Web Token (JWT) válido, emitido pelo Auth0, no header Authorization.
+         * Formato: Authorization: Bearer <jwt_token>.14
+         * O API Gateway (ou um middleware compartilhado nos serviços backend) será responsável por validar a assinatura e a expiração do JWT e extrair informações do usuário (user_id, tenant_id, roles) para uso posterior na lógica de negócios e RLS.
+         * Formato de Dados: JSON será o formato padrão para corpos de requisição e resposta.
+         * Contrato da API (Especificação): OpenAPI Specification (OAS) v3 (anteriormente conhecido como Swagger) será utilizada para definir formalmente todos os endpoints da API REST.
+         * Conteúdo da Especificação: Para cada endpoint, definir:
+         * Path (e.g., /courses/{courseId}).
+         * Método HTTP (GET, POST, PUT, PATCH, DELETE).
+         * Parâmetros (path, query, header, cookie).
+         * Corpo da Requisição (schema JSON para POST/PUT/PATCH).
+         * Respostas (códigos de status HTTP esperados - 200, 201, 204, 400, 401, 403, 404, 500 - e os schemas JSON das respostas correspondentes).
+         * Requisitos de Segurança (indicando que requer autenticação JWT).
+         * Ferramentas: Utilizar ferramentas como Swagger Editor/UI para criar, visualizar e testar a especificação.
+         * Benefícios: Serve como documentação viva, permite a geração automática de código de cliente/servidor (opcional), facilita testes automatizados da API.7
+         * Data Transfer Objects (DTOs): Definir estruturas JSON claras e consistentes para os dados trocados. Exemplos:
+         * GET /courses/{courseId} -> Resposta: CourseDTO { id, institutionId, title, description,... }
+         * POST /enrollments -> Requisição: CreateEnrollmentDTO { courseId, userId, paymentInfo?,... } -> Resposta: EnrollmentDTO { id, userId, courseId, status,... }
+         * Tratamento de Erros: Adotar um formato de resposta de erro padronizado para todas as falhas da API (status >= 400).
+         * Exemplo:
+JSON
+{
+ "statusCode": 404,
+ "error": "NotFound",
+ "message": "Curso com ID 'xyz' não encontrado.",
+ "timestamp": "2024-12-04T10:30:00Z",
+ "path": "/courses/xyz"
+}
+
+         * Isso permite ao frontend tratar erros de forma consistente e exibir mensagens adequadas ao usuário.
+            * Versionamento: A API será versionada via path (e.g., /v1/) para permitir futuras alterações sem quebrar clientes existentes.
+Este contrato bem definido desacopla o desenvolvimento frontend do backend, permitindo que ambas as equipes trabalhem de forma mais independente e eficiente, baseadas em uma especificação clara e acordada.
+5.5. Fluxos de UI Específicos
+Propósito: Detalhar a sequência de interações do usuário e as telas envolvidas para processos chave ou complexos dentro da plataforma, fornecendo clareza sobre a experiência do usuário nesses cenários.
+Conteúdo: Descrições passo-a-passo, acompanhadas de referências aos mockups (Seção 5.2), para os seguintes fluxos:
+            1. Criação de Conteúdo pelo Professor (Exemplo: Ebook via IA):
+            * Passo 1: Professor acessa o Portal do Professor, navega para "Meus Cursos" e seleciona um curso.
+            * Passo 2: No Editor de Curso, seleciona uma Disciplina e clica em "Adicionar Módulo".
+            * Passo 3: Escolhe o tipo de módulo "Ebook".
+            * Passo 4: Na interface do Editor de Módulo Ebook, seleciona a opção "Gerar com IA".
+            * Passo 5: Aparecem campos para inserir o Título do Ebook, Tópicos Principais ou um Prompt descritivo. O professor pode opcionalmente fornecer fontes de dados (links, PDFs carregados via Hub de IA - se integrado aqui).
+            * Passo 6: Professor clica em "Gerar Ebook". Uma indicação de progresso é exibida.
+            * Passo 7: O backend processa a requisição, chama o Serviço de IA (que interage com a LLM API 70 e possivelmente RAG 71), e retorna o conteúdo gerado.
+            * Passo 8: O conteúdo gerado é exibido no editor WYSIWYG.59
+            * Passo 9: Professor revisa, edita e formata o conteúdo conforme necessário usando o editor.
+            * Passo 10: Professor clica em "Salvar Módulo". O módulo é adicionado à disciplina.
+            2. Configuração de White-Label pelo Admin Central:
+            * Passo 1: Admin Central acessa o Portal Admin, navega para "Gestão de Tenants".
+            * Passo 2: Localiza e seleciona a instituição desejada na tabela.
+            * Passo 3: Clica na aba/seção "Configurações de White-Label".42
+            * Passo 4: Utiliza o campo de upload para carregar o novo logo da instituição. Um preview do logo é exibido.
+            * Passo 5: Utiliza os seletores de cor (color pickers) para definir as cores primária e secundária. O preview da interface (ex: cabeçalho) atualiza dinamicamente.
+            * Passo 6: Insere o custom_domain desejado (e.g., cursos.instituicaoA.com.br). Instruções sobre a configuração de DNS (CNAME) necessária pelo tenant são exibidas.
+            * Passo 7: Seleciona a fonte desejada de uma lista pré-definida.
+            * Passo 8: Clica em "Salvar Configurações". O backend valida os dados e os persiste na tabela tenant_configurations. Uma mensagem de sucesso é exibida.
+            3. Matrícula Manual via Admin (com Asaas):
+            * Passo 1: Admin Central (ou Admin do Tenant) acessa o Portal Admin, navega para "Matrículas" ou "Usuários".
+            * Passo 2: Clica em "Nova Matrícula Manual".
+            * Passo 3: Pesquisa por um usuário existente ou preenche um formulário para criar um novo usuário (nome, email).
+            * Passo 4: Seleciona o curso desejado de uma lista/busca.
+            * Passo 5: O sistema pode pré-preencher o valor do curso, ou o admin pode inseri-lo/ajustá-lo. Define a forma de pagamento (Boleto, Pix, Cartão - se for coletar dados).
+            * Passo 6: Clica em "Gerar Cobrança Asaas".
+            * Passo 7: O backend:
+            * Chama a API Asaas POST /customers para criar/buscar o cliente.48
+            * Chama a API Asaas POST /payments com os dados do cliente, valor, curso, vencimento, etc..11
+            * Recebe o payment_id (gateway_charge_id) e o link do boleto/Pix (se aplicável) do Asaas.
+            * Cria o registro na tabela enrollments com status pending_payment.
+            * Cria o registro na tabela payments com os IDs do Asaas e status PENDING.
+            * Passo 8: A interface exibe uma mensagem de sucesso, mostrando o ID da cobrança Asaas e o link do boleto/Pix (se aplicável), que o admin pode copiar e enviar manualmente ao aluno. O status da matrícula é exibido como "Aguardando Pagamento".
+            * Passo 9: (Posteriormente) Quando o aluno paga e o webhook do Asaas (PAYMENT_RECEIVED 54) é processado pelo backend, o status da matrícula e do pagamento são atualizados automaticamente para active e RECEIVED, respectivamente.
+            4. Visualização de Múltiplos Cursos pelo Aluno:
+            * Passo 1: Aluno faz login e acessa o Portal do Aluno.
+            * Passo 2: O Dashboard exibe uma seção "Meus Cursos".
+            * Passo 3: Cada curso matriculado é representado por um "card".72
+            * Passo 4: Cada card de curso exibe: Título do Curso, Imagem (se houver), uma barra de progresso visual indicando a porcentagem concluída, e um botão "Continuar Aprendendo" ou "Acessar Curso".
+            * Passo 5: O aluno pode clicar em um card para ir diretamente para a página principal daquele curso.
+            5. Solicitação de Documento Acadêmico pelo Aluno:
+            * Passo 1: Aluno acessa o Portal do Aluno, navega para a seção "Documentos".
+            * Passo 2: Clica em "Solicitar Novo Documento".
+            * Passo 3: Um formulário modal ou página é exibido.
+            * Passo 4: Aluno seleciona o tipo de documento desejado (e.g., "Certidão de Matrícula", "Histórico Escolar") de uma lista dropdown (baseada nos DocumentTemplates configurados).
+            * Passo 5: Pode haver um campo opcional para justificativa ou observações.
+            * Passo 6: Aluno clica em "Enviar Solicitação".
+            * Passo 7: O backend cria um registro na tabela DocumentRequests com status "Pendente".
+            * Passo 8: A interface exibe uma mensagem de confirmação e atualiza a lista de "Minhas Solicitações" mostrando o novo pedido com status "Pendente".
+Estes fluxos detalhados ajudam a garantir que a implementação da interface do usuário atenda aos requisitos funcionais de forma lógica e amigável.
+6. Especificações das Funcionalidades Principais
+6.1. Módulo Acadêmico (LMS/CMS)
+Propósito: Detalhar as funcionalidades relacionadas à criação, gerenciamento e consumo de conteúdo educacional, bem como avaliação e certificação.
+Conteúdo:
+            * Estrutura Curso/Disciplina/Módulo:
+            * Hierarquia: Um Curso é composto por uma ou mais Disciplinas. Cada Disciplina é composta por um ou mais ContentModules ordenados.8
+            * Flexibilidade de Conteúdo: Conforme Seção 3.4, uma disciplina pode conter um número variável de módulos de diferentes tipos (ebook, video, quiz, assignment).53 O schema (content_modules) suporta essa flexibilidade.
+            * Gerenciamento de Conteúdo (Portal do Professor):
+            * Criação de Cursos/Disciplinas: Interface intuitiva para criar a estrutura básica do curso e suas disciplinas.
+            * Criação de Módulos:
+            * Ebook: Opção de editor WYSIWYG avançado (com formatação, imagens, links, tabelas 59) para criação manual. Opção adicional para geração via IA (ver Seção 7), onde o professor fornece tópicos/prompt e a IA gera o texto inicial, que pode ser editado no WYSIWYG. O conteúdo do ebook (HTML ou Markdown) é armazenado no campo config do módulo ou linkado externamente.
+            * Vídeo: Opção para colar links de plataformas externas (YouTube 18, Vimeo 17, Google Drive 15). O sistema deve extrair metadados básicos (título, thumbnail) e usar o player apropriado (YouTube/Vimeo Player SDK 17 ou player de vídeo HTML5 para Drive/outros). Opção de upload direto para armazenamento seguro (Bunny.net Storage/Stream 19 ou AWS S3), com processamento/transcodificação em background se necessário. O config armazena a URL e o provedor.
+            * Arquivos (Google Drive/Dropbox): Integração para linkar arquivos (PDFs, planilhas, etc.) armazenados no Google Drive 15 ou Dropbox 16 como material de apoio. Requer configuração de permissões adequadas via API para garantir que os alunos matriculados possam visualizar.73
+            * Gerenciamento: Facilidade para reordenar disciplinas e módulos (drag-and-drop idealmente), editar e excluir conteúdo.
+            * Avaliações:
+            * Construtor de Quiz (Simulado/Avaliação Final): Interface para criar questões de múltipla escolha (até 30 para simulados, até 10 para avaliação final, conforme especificado). Definir opções, resposta correta, feedback opcional por questão/resposta. Armazenar estrutura do quiz no config do módulo quiz. Cálculo automático de nota.
+            * Atividade Prática Discursiva: Interface para o professor definir as instruções da atividade. Alunos submetem texto e/ou arquivos.
+            * Integração Turnitin: Para atividades práticas e potencialmente outros envios de texto/arquivo, opção para habilitar a verificação de similaridade. O sistema enviará o documento para a API do Turnitin (Create Submission, Upload) 75, solicitará a geração do relatório (Generate Similarity Report) 75, e exibirá o score de similaridade e um link para o relatório completo (Viewer Launch 75) para o professor na interface de correção. Requer configuração da API Key do Turnitin por tenant e tratamento da EULA.75
+            * Acompanhamento do Aluno (Portal do Aluno):
+            * Visualização clara do progresso geral no curso e em cada disciplina/módulo (barras de progresso, status de conclusão).8
+            * Capacidade de retomar o aprendizado do último módulo acessado.
+            * Visualização de notas obtidas em quizzes e avaliações.
+            * Certificação:
+            * Geração Automática: O sistema verifica automaticamente se o aluno atendeu aos critérios de conclusão do curso (e.g., completar todos os módulos obrigatórios, atingir nota mínima na avaliação final).
+            * Emissão: Geração de um certificado digital (PDF) baseado em um template configurável por instituição.
+            * Conteúdo do Certificado: Nome do aluno, nome do curso, data de conclusão, ID único do certificado, QR Code para validação.
+            * Validação QR Code: O QR Code aponta para uma página pública de validação no Edunéxia que confirma a autenticidade do certificado usando seu ID único.
+            * Assinatura Digital (Opcional/Complexo): Integração com serviços de assinatura digital padrão ICP-Brasil (requer provedor externo e API específica) para adicionar validade jurídica.
+            * Blockchain (Opcional/Complexo): Registro do hash do certificado em uma blockchain pública ou permissionada para garantir imutabilidade e validação descentralizada (requer infraestrutura e conhecimento específico).
+            * Biblioteca (Portal do Aluno):
+            * Área onde ficam disponíveis materiais complementares (e-books, artigos, links) associados aos cursos em que o aluno está matriculado ou disponibilizados pela instituição. Conteúdo gerenciado pelo Portal Admin/Professor.
+6.2. Módulo Comercial (CRM/Vendas)
+Propósito: Detalhar as funcionalidades focadas na aquisição, gerenciamento e conversão de leads em alunos matriculados.
+Conteúdo:
+            * Captura de Leads:
+            * Formulários Web: Criação de formulários customizáveis no site público e landing pages para captura de dados de interessados. Integração com Google reCAPTCHA v3 para prevenção de spam.27
+            * Integração Social Media:
+            * Instagram: Configuração de Webhooks para Lead Ads.78 Quando um lead é gerado via anúncio no Instagram, um webhook notifica o Edunéxia, que captura os dados e cria um registro de Lead. Requer permissões apropriadas (leads_retrieval, pages_manage_metadata, etc.).78
+            * Facebook Messenger: Configuração de Webhooks para a página do Facebook.22 Interações iniciais via Messenger podem ser capturadas como leads. Respostas podem ser enviadas via Send API.79
+            * Importação Manual/API: Possibilidade de importar listas de leads ou criar leads via API.
+            * Gerenciamento de Funil de Vendas:
+            * Estágios Customizáveis: Permitir que administradores definam os estágios do funil de vendas (e.g., Lead, Contatado, Qualificado, Proposta Enviada, Negociação, Matriculado, Perdido). Inspiração nos funis do Kajabi.9
+            * Visualização Kanban/Lista: Interface para visualizar leads em cada estágio e movê-los através do funil.
+            * Atribuição de Leads: Leads podem ser atribuídos a usuários específicos (vendedores) ou a Polos Educacionais.
+            * Automação de Comunicação:
+            * Gatilhos: Definir gatilhos baseados em ações do lead (e.g., preencheu formulário, clicou em link de email) ou mudança de estágio no funil.
+            * Ações Automatizadas:
+            * WhatsApp: Envio de mensagens automáticas (templates pré-aprovados para iniciar conversas fora da janela de 24h) via WhatsApp Business Cloud API.20 Requer configuração da API e gerenciamento de templates.
+            * Email: Envio de sequências de emails (nutrição de leads) via integração SMTP (Resend 23 ou Brevo 24). Templates de email personalizáveis por tenant.
+            * Tarefas Internas: Criação automática de tarefas para vendedores (e.g., "Ligar para o lead X").
+            * Personalização: Utilizar dados do lead (nome, curso de interesse) para personalizar as mensagens automáticas.82
+            * Distribuição para Polos:
+            * Regras de Roteamento: Configurar regras (baseadas em localização geográfica inferida, origem do lead, curso de interesse) para direcionar automaticamente novos leads para o Portal do Polo correspondente.
+            * Notificações: Polos recebem notificações sobre novos leads atribuídos.
+            * Relatórios de CRM:
+            * Taxas de conversão por estágio do funil.
+            * Desempenho por vendedor/polo.
+            * Origem de leads mais eficaz.
+            * Tempo médio no ciclo de vendas.
+A IA pode ser integrada aqui para lead scoring (prever a probabilidade de conversão), sugerir os próximos passos para vendedores, e otimizar a personalização das mensagens automáticas.82
+6.3. Módulo Financeiro
+Propósito: Detalhar as funcionalidades relacionadas ao processamento de pagamentos, gerenciamento de assinaturas, divisão de receitas (split) e relatórios financeiros.
+Conteúdo:
+            * Integração com Gateways de Pagamento:
+            * Asaas (Primário): 11-48-13
+            * Meios de Pagamento: Suporte a Boleto Bancário, Pix e Cartão de Crédito.
+            * Checkout/Links de Pagamento: Geração de links de pagamento (Asaas Checkout) para planos/cursos específicos, a serem usados no site público ou enviados diretamente.11
+            * Criação Manual de Cobranças: API para criar clientes (POST /customers 48) e cobranças (POST /payments 11) diretamente, essencial para o fluxo de matrícula manual.
+            * Assinaturas: Criação e gerenciamento de cobranças recorrentes via API (POST /subscriptions).54
+            * Split de Pagamentos: Funcionalidade chave para Polos/Parceiros. Configurar split (valor fixo ou percentual sobre o valor líquido) na criação da cobrança via API, especificando o walletId do destinatário.47 O split ocorre automaticamente no recebimento.
+            * Webhooks: Essencial para receber notificações em tempo real sobre status de pagamentos (PAYMENT_RECEIVED, PAYMENT_OVERDUE, PAYMENT_REFUNDED), assinaturas e splits (PAYMENT_SPLIT_...).47 O backend deve processar esses webhooks para atualizar os status no Edunéxia.
+            * White-Label Asaas: Considerar as implicações da funcionalidade White Label do Asaas, se utilizada, onde subcontas são criadas via API e não têm acesso direto ao painel Asaas.84 Requer alinhamento prévio com o gerente de contas Asaas.84
+            * Stripe (Alternativa): 12
+            * Funcionalidades: Suporte a Payment Links 12, Subscriptions, e split de pagamentos via Stripe Connect (Direct Charges ou Destination Charges com transfer_data ou application_fee_percent).86
+            * Webhooks: Mecanismo similar ao Asaas para notificações de eventos.
+            * Iugu (Alternativa): 13-89
+            * Funcionalidades: Oferece funcionalidades de Marketplace e Split de Pagamento.13 A documentação da API direta parece menos detalhada que Asaas/Stripe, mas SDKs existem.88 Requereria investigação mais aprofundada para implementação.
+            * Abstração de Gateway: O backend deve ter uma camada de abstração para interagir com diferentes gateways, tratando suas APIs e webhooks específicos de forma padronizada internamente.
+            * Gerenciamento de Assinaturas:
+            * Lógica no backend para rastrear o status das assinaturas (ativa, cancelada, inadimplente) com base nos webhooks do gateway.
+            * Atualizar o status da enrollment correspondente no Edunéxia (e.g., bloquear acesso se a assinatura for cancelada ou ficar muito tempo inadimplente).
+            * Lógica de Split de Pagamento (Asaas):
+            * Configuração: Permitir que o Admin Central defina regras de split padrão para Polos/Parceiros (e.g., Polo X recebe 15% de todas as matrículas que gerar).
+            * Aplicação: Ao criar uma cobrança no Asaas via API para uma matrícula vinculada a um Polo/Parceiro, o backend deve incluir o parâmetro split com o walletId e o valor/percentual configurado.47
+            * Reconciliação: Monitorar webhooks de split 47 e implementar relatórios para verificar se os splits foram processados corretamente. Tratar casos de recusa ou estorno de split.
+            * Relatórios Financeiros (Portal Admin Central):
+            * Receita total e por curso/plano.
+            * Taxas de inadimplência.
+            * Relatórios de comissões pagas/pendentes para Polos/Parceiros.
+            * Extratos por período.
+            * Visão Financeira do Aluno (Portal do Aluno):
+            * Histórico de pagamentos realizados.
+            * Acesso fácil a boletos pendentes (link para o boleto no Asaas ou exibição dos dados/código de barras).
+            * Status de assinaturas recorrentes.
+            * Fluxo de Matrícula Manual (Detalhado):
+            * Admin insere dados do aluno e seleciona curso na interface.
+            * Backend chama POST /customers (Asaas API).48
+            * Backend chama POST /payments (Asaas API), associando ao cliente e definindo valor/vencimento.11
+            * Backend armazena gateway_charge_id e gateway_customer_id nas tabelas payments e enrollments com status pendente.
+            * Interface exibe link/dados do boleto/Pix para o admin.
+            * Quando o webhook PAYMENT_RECEIVED 54 chega para o gateway_charge_id correspondente, o backend atualiza o status do pagamento e da matrícula, liberando o acesso ao curso.
+A complexidade de suportar múltiplos gateways é significativa. Focar inicialmente no Asaas simplifica o desenvolvimento. A lógica de split, especialmente o tratamento de exceções e reconciliação, requer atenção cuidadosa para garantir a distribuição correta dos valores.47
+6.4. Módulo de Comunicação & Suporte
+Propósito: Detalhar as funcionalidades que permitem a interação entre usuários dentro da plataforma e o gerenciamento de solicitações e documentos acadêmicos.
+Conteúdo:
+            * Mensageria Interna:
+            * Funcionalidade: Sistema de troca de mensagens de texto simples entre Alunos e Professores (instrutores dos cursos em que o aluno está matriculado).
+            * Implementação: Requer tabelas no banco de dados para armazenar mensagens (messages com sender_id, receiver_id, content, timestamp, read_status, conversation_id) e conversas (conversations). Interface de chat simples nos portais Aluno e Professor. Notificações na plataforma sobre novas mensagens. Inspirado em sistemas de mensagens básicos.8
+            * Solicitação de Documentos Acadêmicos (Portal do Aluno):
+            * Interface: Formulário onde o aluno seleciona o tipo de documento desejado (e.g., "Certidão de Matrícula", "Histórico Escolar") de uma lista pré-definida.
+            * Templates: Administradores definem templates para cada tipo de documento na tabela DocumentTemplates (possivelmente usando uma sintaxe como Liquid 13 ou similar para inserir dados do aluno dinamicamente).
+            * Fluxo: Aluno submete a solicitação -> Registro criado em DocumentRequests com status "Pendente".
+            * Geração e Aprovação de Documentos (Portal Admin Central):
+            * Fila de Solicitações: Interface para administradores visualizarem as solicitações pendentes.
+            * Processamento: Admin seleciona uma solicitação -> Sistema busca dados do aluno e template correspondente -> Gera um preview do documento (PDF).
+            * Aprovação/Rejeição: Admin revisa o preview -> Aprova (documento final é gerado e disponibilizado para o aluno) ou Rejeita (com motivo). O status em DocumentRequests é atualizado.
+            * Disponibilização: Aluno é notificado e pode baixar o documento PDF finalizado a partir do Portal do Aluno.
+            * Upload de Documentos por Parceiros (Portal do Parceiro):
+            * Contexto: Parceiros de Certificação precisam enviar documentos dos alunos que eles cadastraram para que a instituição valide antes de emitir o certificado.
+            * Interface: No Portal do Parceiro, para cada aluno cadastrado, há uma área para upload de arquivos (RG, CPF, Comprovante de Endereço, Histórico Escolar anterior, etc.). Tipos de documentos obrigatórios são definidos pela instituição.
+            * Armazenamento: Arquivos são enviados para armazenamento seguro (Google Drive 15, Dropbox 16, ou Bunny.net Storage 19), com links/referências armazenados na tabela StudentDocuments, associados ao user_id e institution_id. Permissões de acesso devem ser restritas aos administradores da instituição e ao parceiro que fez o upload.
+            * Aprovação de Documentos de Parceiros (Portal Admin Central):
+            * Fila de Documentos: Interface para a secretaria/administração revisar os documentos enviados pelos parceiros.
+            * Visualização: Acesso seguro aos arquivos enviados.
+            * Deferimento/Indeferimento: Admin marca cada documento como "Aprovado" ou "Reprovado" (com motivo). O status é armazenado em StudentDocuments.
+            * Liberação para Certificação: A emissão do certificado para um aluno de parceiro só é permitida após todos os documentos obrigatórios serem aprovados pela secretaria.
+Este módulo facilita a comunicação direta e o fluxo de processos administrativos importantes, como a solicitação e validação de documentos, integrando diferentes portais.
+7. Integração de Inteligência Artificial (AI)
+7.1. Casos de Uso de IA & Plano de Implementação
+Propósito: Identificar aplicações específicas de Inteligência Artificial dentro do Edunéxia NextGen e planejar como serão implementadas para otimizar processos e agregar valor.
+Conteúdo:
+A IA será um componente transversal, visando automatizar tarefas, personalizar experiências e fornecer insights.
+Casos de Uso Identificados:
+            1. Geração de Conteúdo Educacional:
+            * E-books: Geração de rascunhos de e-books a partir de tópicos, palavras-chave ou documentos fonte (via RAG) fornecidos pelo professor. 70
+            * Questões de Quiz/Avaliação: Geração de questões de múltipla escolha baseadas no conteúdo de um e-book ou vídeoaula. 44
+            * Implementação: Utilização de APIs de Large Language Models (LLMs) como GPT-4, Claude, ou Gemini. Requer engenharia de prompts cuidadosa para direcionar a geração e garantir a qualidade e relevância pedagógica. A integração com RAG (Seção 7.2) permitirá basear a geração em conteúdo específico do tenant.
+            2. Assistência ao CRM:
+            * Lead Scoring: Modelo preditivo (treinado com dados históricos) para estimar a probabilidade de um lead se converter em matrícula, ajudando a priorizar esforços de vendas.
+            * Personalização de Mensagens: IA sugere ou gera automaticamente mensagens de follow-up personalizadas (email, WhatsApp) com base no perfil do lead e histórico de interações.82
+            * Previsão de Tendências de Matrícula: Análise de dados históricos para prever quais cursos terão maior demanda em períodos futuros, auxiliando no planejamento de recursos.82
+            * Implementação: Modelos preditivos podem ser treinados usando bibliotecas de Machine Learning (e.g., scikit-learn em Python). A personalização de mensagens usa LLM APIs com contexto do lead.
+            3. Suporte ao Aluno e Administrativo:
+            * Chatbot Inteligente: Um chatbot disponível nos portais (especialmente Aluno e talvez site público) para responder perguntas frequentes sobre cursos, procedimentos, pagamentos, etc..83
+            * Implementação: O chatbot será potencializado pela Central de Alimentação de IA (RAG), permitindo que ele responda com base na base de conhecimento específica da instituição (documentos, FAQs, políticas).71 Utiliza LLM APIs para compreensão da pergunta e geração da resposta, aumentada pelo contexto recuperado do RAG.
+            4. Assistência Acadêmica (Potencial/Experimental):
+            * Sugestão de Recursos: Com base no progresso e dificuldades do aluno, a IA pode sugerir materiais relevantes da biblioteca ou módulos específicos para revisão.
+            * Feedback em Rascunhos: (Considerar implicações éticas e de plágio) Potencialmente, oferecer análise preliminar de rascunhos de tarefas discursivas quanto à clareza, estrutura ou gramática (sem gerar conteúdo).
+            * Implementação: Sugestão de recursos pode usar análise de similaridade ou regras baseadas em desempenho. Feedback em rascunhos requer LLM APIs e prompts muito bem definidos.
+            5. Otimização Administrativa:
+            * Análise de Feedback: IA pode analisar e sumarizar grandes volumes de feedback de alunos (pesquisas, comentários) para identificar temas recorrentes e áreas de melhoria.
+            * Identificação de Alunos em Risco: Análise de padrões de acesso, progresso e engajamento para sinalizar alunos com risco de evasão, permitindo intervenção proativa.82
+            * Implementação: Análise de feedback usa técnicas de NLP (análise de sentimento, extração de tópicos) via LLMs ou bibliotecas específicas. Identificação de risco usa modelos preditivos baseados em dados de log e progresso.
+Tabela: Matriz de Casos de Uso de IA
+Caso de Uso
+	Módulo/Portal Afetado
+	Técnica IA Principal
+	Fontes de Dados Principais
+	Impacto Potencial
+	Prioridade
+	Geração de Ebook (Rascunho)
+	CMS (Portal Professor)
+	LLM API (+ RAG opcional)
+	Prompt do professor, Documentos do RAG
+	Alta (Eficiência Prof.)
+	Alta
+	Geração de Questões (Quiz)
+	CMS (Portal Professor)
+	LLM API
+	Conteúdo do módulo (Ebook/Vídeo transcrito)
+	Média (Eficiência Prof.)
+	Média
+	Lead Scoring
+	CRM (Portal Admin/Polo)
+	Modelo Preditivo (ML)
+	Histórico de Leads, Matrículas
+	Alta (Vendas)
+	Média
+	Personalização Mensagens CRM
+	CRM (Backend Automação)
+	LLM API
+	Dados do Lead, Histórico de Interação
+	Média (Engajamento)
+	Média
+	Previsão Tendências Matrícula
+	Admin Central
+	Modelo Preditivo (ML)
+	Histórico de Matrículas, Dados de Mercado (se disponível)
+	Alta (Planejamento)
+	Baixa
+	Chatbot de Suporte (RAG)
+	Aluno, Site Público, Admin?
+	RAG + LLM API
+	Base de Conhecimento Tenant (PDFs, FAQs, URLs), DB Edunéxia
+	Alta (Suporte/Eficiência)
+	Alta
+	Sugestão Recursos Biblioteca
+	LMS (Portal Aluno)
+	Análise Similaridade / ML
+	Progresso Aluno, Conteúdo Curso, Metadados Biblioteca
+	Média (Aprendizagem)
+	Baixa
+	Análise Feedback Aluno
+	Admin Central
+	NLP (LLM API)
+	Pesquisas, Comentários
+	Média (Melhoria Cont.)
+	Média
+	Identificação Aluno Risco
+	Admin Central, Prof.?
+	Modelo Preditivo (ML)
+	Logs de Acesso, Progresso, Engajamento
+	Alta (Retenção)
+	Média
+	Esta matriz ajuda a priorizar o desenvolvimento das funcionalidades de IA, começando pelas que oferecem maior impacto com viabilidade técnica razoável, como a geração de rascunhos de conteúdo e o chatbot RAG.
+7.2. Arquitetura da Central de Alimentação de IA (RAG)
+Propósito: Projetar a infraestrutura e o fluxo de dados para permitir que cada instituição cliente alimente sua própria base de conhecimento, que será usada por funcionalidades de IA como o chatbot de suporte e a geração de conteúdo contextualizado.
+Conteúdo:
+A Central de Alimentação de IA implementará um pipeline de Retrieval-Augmented Generation (RAG) multi-tenant.
+Diagrama de Arquitetura RAG Multi-Tenant:
+Figura 4: Arquitetura da Central de Alimentação de IA (RAG) - Edunéxia NextGen (Ilustrativo)
+(Nota: Um diagrama de fluxo de dados detalhado seria inserido aqui)
+Componentes e Fluxo:
+            1. Fontes de Dados (Input): Administradores de tenant (via Portal Admin) poderão fornecer dados de diversas fontes:
+            * Upload de Arquivos: PDFs, DOCX, TXT.92
+            * URLs de Vídeos do YouTube: Links para vídeos relevantes.
+            * URLs de Sites/Artigos: Links para páginas web com conteúdo pertinente.
+            * Entrada Manual de Texto: FAQs, políticas internas inseridas diretamente.
+            2. Pré-processamento e Chunking: Uma camada de processamento (provavelmente um serviço backend assíncrono) tratará cada tipo de fonte:
+            * PDFs/Documentos: Extração de texto usando bibliotecas como PyMuPDF, Unstructured ou Tika. Desafios incluem lidar com layouts complexos, tabelas e imagens.92
+            * YouTube URLs: Extração de transcrições usando a API do YouTube ou bibliotecas como youtube-transcript-api. A qualidade da transcrição pode variar.
+            * Web URLs: Extração de conteúdo principal da página (web scraping) usando bibliotecas como BeautifulSoup ou Scrapy. Suscetível a bloqueios e mudanças na estrutura do site.
+            * Chunking: O texto extraído é dividido em pedaços menores (chunks) para facilitar a busca semântica. Estratégias incluem chunking de tamanho fixo, por frases/parágrafos, ou chunking semântico (usando modelos de linguagem para agrupar ideias relacionadas). O tamanho e a sobreposição (overlap) dos chunks afetam a qualidade da recuperação.71 Cada chunk deve ser associado ao tenant_id e à fonte original.
+            3. Geração de Embeddings: Cada chunk de texto é convertido em um vetor numérico (embedding) que captura seu significado semântico.
+            * Modelo de Embedding: Utilizar modelos eficientes e eficazes como os da família Sentence Transformers (e.g., all-MiniLM-L6-v2, ou modelos multilíngues se necessário) ou APIs de embedding como a text-embedding-ada-002 da OpenAI. A escolha do modelo impacta a qualidade da busca semântica.
+            4. Armazenamento Vetorial (Vector Store): Os embeddings e os chunks de texto correspondentes (junto com metadados como tenant_id, source_url, document_id) são armazenados em um banco de dados vetorial.
+            * Opções: Extensão pgvector no PostgreSQL principal (simplicidade), ou bancos de dados vetoriais dedicados como Pinecone, Weaviate, Milvus (escalabilidade e funcionalidades avançadas).
+            * Indexação: O banco de dados vetorial utiliza índices (e.g., HNSW, IVFFlat) para permitir buscas rápidas por similaridade vetorial (Nearest Neighbor Search).
+            5. Camada de Recuperação (Retrieval): Quando uma funcionalidade de IA (e.g., chatbot) recebe uma consulta do usuário:
+            * A consulta é convertida em um embedding usando o mesmo modelo do passo 3.
+            * Uma busca por similaridade é realizada no banco de dados vetorial, filtrando obrigatoriamente pelo tenant_id do usuário atual.
+            * Os k chunks mais relevantes (semanticamente similares à consulta) são recuperados. Técnicas como MultiQueryRetriever 71 ou reranking podem ser usadas para melhorar a relevância.
+            6. Aumento do Contexto e Geração (LLM):
+            * Os chunks recuperados são formatados e adicionados ao prompt original do usuário como contexto.
+            * O prompt aumentado é enviado para a API do LLM (e.g., OpenAI, Claude).70
+            * O LLM gera a resposta com base no prompt e no contexto fornecido.
+            7. Resposta: A resposta gerada pelo LLM é retornada ao usuário/aplicação.
+Isolamento de Tenant: A chave para a multi-tenancy no RAG é garantir que a ingestão e a recuperação sejam estritamente segregadas por tenant_id. Cada chunk e embedding no vector store deve ter o tenant_id associado. As queries de recuperação devem incluir um filtro WHERE tenant_id = current_tenant_id.
+Orquestração: Frameworks como LangChain ou LlamaIndex 71 podem ser usados para orquestrar esse pipeline complexo, simplificando a integração dos diferentes componentes (pré-processamento, embedding, vector store, LLM).
+Construir um pipeline RAG robusto, especialmente para fontes de dados variadas como PDFs e vídeos, é um desafio técnico significativo.92 Requer experimentação com estratégias de chunking, modelos de embedding e técnicas de recuperação para otimizar a relevância e a precisão das respostas, minimizando "alucinações" do LLM.
+7.3. Estratégia de Personalização por Tenant
+Propósito: Delinear como as funcionalidades de IA serão
+Referências citadas
+            1. Database - Replit Docs, acessado em abril 28, 2025, https://docs.replit.com/cloud-services/storage-and-databases/sql-database
+            2. Building AI-powered applications with Replit Agent - Neon Guides, acessado em abril 28, 2025, https://neon.tech/guides/replit-neon
+            3. Neon vs Supabase: A Comprehensive Comparison and Analysis Guide - Chat2DB, acessado em abril 28, 2025, https://chat2db.ai/resources/blog/neon-vs-supabase
+            4. Install the Neon Postgres Previews Integration on Vercel, acessado em abril 28, 2025, https://neon.tech/docs/guides/vercel-previews-integration
+            5. The Best Way to use Supabase with Vercel / Next.js with lots of data? : r/nextjs - Reddit, acessado em abril 28, 2025, https://www.reddit.com/r/nextjs/comments/1hwd49d/the_best_way_to_use_supabase_with_vercel_nextjs/
+            6. Replit to Production Services - Sourcetoad, acessado em abril 28, 2025, https://sourcetoad.com/replit-to-production-help/
+            7. 2. Open edX Architecture — Latest documentation, acessado em abril 28, 2025, https://docs.openedx.org/en/open-release-quince.master/developers/references/legacy_guide/architecture.html
+            8. Open Edx Database Structure and Schema Diagram, acessado em abril 28, 2025, https://databasesample.com/database/open-edx-database
+            9. Build and Optimize Sales Funnels for Your Business - Kajabi, acessado em abril 28, 2025, https://kajabi.com/features/funnels
+            10. Kajabi vs ClickFunnels - WP-Tonic, acessado em abril 28, 2025, https://www.wp-tonic.com/kajabi-vs-clickfunnels/
+            11. Payments - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/payments-1
+            12. After a payment link payment - Stripe Documentation, acessado em abril 28, 2025, https://docs.stripe.com/payment-links/post-payment
+            13. Introduction to iugu, acessado em abril 28, 2025, https://dev.iugu.com/docs/introduction-to-iugu
+            14. Pricing - Auth0, acessado em abril 28, 2025, https://auth0.com/pricing
+            15. Google Drive API - Google for Developers, acessado em abril 28, 2025, https://developers.google.com/drive/api/reference/rest/v3
+            16. DBX Sharing Guide - Dropbox, acessado em abril 28, 2025, https://developers.dropbox.com/dbx-sharing-guide
+            17. Which API should I use? - Vimeo Help Center, acessado em abril 28, 2025, https://help.vimeo.com/hc/en-us/articles/12427681730577-Which-API-should-I-use
+            18. API Reference | YouTube Data API - Google for Developers, acessado em abril 28, 2025, https://developers.google.com/youtube/v3/docs
+            19. bunny.net - The Content Delivery platform that truly Hops!, acessado em abril 28, 2025, https://bunny.net/
+            20. Wati Pricing | WhatsApp Business API, acessado em abril 28, 2025, https://www.wati.io/pricing/
+            21. Webhooks - Instagram Platform - Meta for Developers, acessado em abril 28, 2025, https://developers.facebook.com/docs/instagram-platform/webhooks/
+            22. Webhooks - Messenger Platform - Documentation - Meta for Developers, acessado em abril 28, 2025, https://developers.facebook.com/docs/messenger-platform/webhooks/
+            23. Pricing - Resend, acessado em abril 28, 2025, https://resend.com/pricing
+            24. Pricing Plans | Brevo, acessado em abril 28, 2025, https://www.brevo.com/pricing/
+            25. The paper lookup tool for Similarity and SimCheck - Turnitin Guides, acessado em abril 28, 2025, https://guides.turnitin.com/hc/en-us/articles/21700974874125-The-paper-lookup-tool-for-Similarity-and-SimCheck
+            26. Plans and Pricing - Sentry, acessado em abril 28, 2025, https://sentry.io/pricing/
+            27. reCAPTCHA v3 - Google for Developers, acessado em abril 28, 2025, https://developers.google.com/recaptcha/docs/v3
+            28. Deno Vs Node.js: Which One Is Better In 2025? - DevsData, acessado em abril 28, 2025, https://devsdata.com/deno-vs-node-which-one-is-better-in-2025/
+            29. Node.js vs Bun vs Deno: Best JavaScript Runtime in 2025 - Seven Square, acessado em abril 28, 2025, https://www.sevensquaretech.com/nodejs-vs-deno-bun-javascript-runtime-comparison/
+            30. PostgreSQL Row-Level Security - Neon, acessado em abril 28, 2025, https://neon.tech/postgresql/postgresql-administration/postgresql-row-level-security
+            31. PBAC in PostgreSQL - DataSunrise, acessado em abril 28, 2025, https://www.datasunrise.com/knowledge-center/pbac-in-postgresql/
+            32. Multi-tenant DB architecture advice needed: Supabase vs Neon.tech for B2B SaaS - Reddit, acessado em abril 28, 2025, https://www.reddit.com/r/PostgreSQL/comments/1isnzu2/multitenant_db_architecture_advice_needed/
+            33. Vercel hosting : r/replit - Reddit, acessado em abril 28, 2025, https://www.reddit.com/r/replit/comments/1ja58pn/vercel_hosting/
+            34. CDN Pricing | Affordable Pay As You Go CDN - Bunny.net, acessado em abril 28, 2025, https://bunny.net/pricing/
+            35. Multi-Tenant Applications Best Practices - Auth0, acessado em abril 28, 2025, https://auth0.com/docs/get-started/auth0-overview/create-tenants/multi-tenant-apps-best-practices
+            36. Top 10 Sentry Alternatives for Error Tracking in 2025 - SigNoz, acessado em abril 28, 2025, https://signoz.io/comparisons/sentry-alternatives/
+            37. Multi-tenant Application Database Design | GeeksforGeeks, acessado em abril 28, 2025, https://www.geeksforgeeks.org/multi-tenant-application-database-design/
+            38. Database Architecture for Multi-Tenant Apps : r/PostgreSQL - Reddit, acessado em abril 28, 2025, https://www.reddit.com/r/PostgreSQL/comments/1acxgdk/database_architecture_for_multitenant_apps/
+            39. Multi-Tenant Architecture for Embedded Analytics: Unleashing Insights for Everyone - Qrvey, acessado em abril 28, 2025, https://qrvey.com/blog/multi-tenant-architecture-for-embedded-analytics-unleashing-insights-for-everyone/
+            40. How to create a Multi-Tenant SaaS CRM Platform?, acessado em abril 28, 2025, https://krayincrm.com/create-multi-tenant-saas-crm-platform/
+            41. The 14 Best White-Label LMS in 2025 - Thinkific, acessado em abril 28, 2025, https://www.thinkific.com/blog/white-label-lms/
+            42. White Label Analytics: Key Benefits, Platforms, and How It Works - Qrvey, acessado em abril 28, 2025, https://qrvey.com/blog/white-label-analytics/
+            43. SaaS-Based Multi-Tenancy: Build White-Label Products with Ease Using FAB Builder, acessado em abril 28, 2025, https://fabbuilder.com/pages/easy-saas-based-multi-tenancy-white-label-products-micro-sites/
+            44. White Label LMS Guide: 10 Best Platforms, What's & Why's - EducateMe, acessado em abril 28, 2025, https://www.educate-me.co/blog/white-label-lms-platforms
+            45. Multi-tenant architecture - Clerk, acessado em abril 28, 2025, https://clerk.com/docs/guides/multi-tenant-architecture
+            46. 19 Best White Label Dashboard Software Reviewed In 2025 - The Digital Project Manager, acessado em abril 28, 2025, https://thedigitalprojectmanager.com/tools/best-white-label-dashboard-software/
+            47. Overview - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/payment-split-overview
+            48. Create new customer - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/reference/create-new-customer
+            49. List payments - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/reference/list-payments
+            50. Split - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/split
+            51. How to Detect Idle Time in JavaScript ? | GeeksforGeeks, acessado em abril 28, 2025, https://www.geeksforgeeks.org/how-to-detect-idle-time-in-javascript/
+            52. How to Track User Inactivity on Your Website and Why It Matters - DEV Community, acessado em abril 28, 2025, https://dev.to/gyantocode/how-to-track-user-inactivity-on-your-website-and-why-it-matters-2b7h
+            53. Must-Have LMS Features For Diverse Learning Styles - EducateMe, acessado em abril 28, 2025, https://www.educate-me.co/blog/lms-features
+            54. Subscriptions - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/subscriptions
+            55. Best Online Database Schema Courses and Programs | edX, acessado em abril 28, 2025, https://www.edx.org/learn/database-schema
+            56. openedx/docs.openedx.org: Open edX Official Documentation - GitHub, acessado em abril 28, 2025, https://github.com/openedx/docs.openedx.org
+            57. acessado em dezembro 31, 1969, https://edunexiareplit-ai-2-magonder.replit.app/
+            58. LMS UI/UX Design: How to Build a Clear & Modern User Interface - Riseapps, acessado em abril 28, 2025, https://riseapps.co/lms-ui-ux-design/
+            59. Custom LMS design: creating eLearning platforms for 21st century learning - TinyMCE, acessado em abril 28, 2025, https://www.tiny.cloud/blog/LMS-design/
+            60. E-learning platform design guide - Justinmind, acessado em abril 28, 2025, https://www.justinmind.com/ui-design/how-to-design-e-learning-platform
+            61. 25 E-Learning Website Design Examples For Inspiration - Subframe, acessado em abril 28, 2025, https://www.subframe.com/tips/e-learning-website-design-examples
+            62. UX principles for eLearning: designing courses with the user at the center - DynDevice LMS, acessado em abril 28, 2025, https://www.dyndevice.com/en/news/ux-principles-for-elearning-designing-courses-with-the-user-at-the-center-ELN-2136/
+            63. Lesson 7: UI/UX best practices for your online courses - iSpring, acessado em abril 28, 2025, https://www.ispringsolutions.com/blog/how-to-create-online-course/lesson-7
+            64. 4 Employee Productivity Report Templates for 2025 - ActivTrak, acessado em abril 28, 2025, https://www.activtrak.com/blog/employee-productivity-report-template/
+            65. HR Dashboard: 7 Key Examples and Best Practices - Qlik, acessado em abril 28, 2025, https://www.qlik.com/us/dashboard-examples/hr-dashboard
+            66. 11+ HR dashboard examples & best practices - HiBob, acessado em abril 28, 2025, https://www.hibob.com/blog/hr-dashboard-examples/
+            67. 10 HR Dashboard Examples for Smarter Workforce Strategies - Crunchr, acessado em abril 28, 2025, https://www.crunchr.com/resources/blog/hr-dashboards-examples-for-smarter-workforce-strategies/
+            68. Employee Productivity Dashboard Template & Example - Retool, acessado em abril 28, 2025, https://retool.com/templates/employee-productivity-dashboard
+            69. User Interface Design: 3 Things E-Learning Designers Need to Know | Articulate, acessado em abril 28, 2025, https://community.articulate.com/blog/articles/user-interface-design-3-things-e-learning-designers-need-to-know/1126309
+            70. LLM APIs: Tips for Bridging the Gap - IBM, acessado em abril 28, 2025, https://www.ibm.com/think/insights/llm-apis
+            71. RAG (Retrieval-augmented generation) - Reddit, acessado em abril 28, 2025, https://www.reddit.com/r/Rag/best/?after=dDNfMWpnYTh3dg%3D%3D&sort=best&t=YEAR
+            72. Top 10 Learning Management System Examples for Effective Training in 2025, acessado em abril 28, 2025, https://www.coursebox.ai/blog/learning-management-system-examples
+            73. List a file's or shared drive's permissions | Google Drive API | Postman API Network, acessado em abril 28, 2025, https://www.postman.com/postman/google-api-workspace/request/q8pghbp/list-a-file-s-or-shared-drive-s-permissions
+            74. How to manage your Dropbox file and folder sharing permissions, acessado em abril 28, 2025, https://help.dropbox.com/share/set-file-folder-permissions
+            75. Certification Review - Turnitin Core API, acessado em abril 28, 2025, https://developers.turnitin.com/turnitin-core-api/certification-review
+            76. Turnitin | FAQ - FeedbackFruits, acessado em abril 28, 2025, https://help.feedbackfruits.com/hc/en-us/articles/23527133557650
+            77. Implementing Google reCAPTCHA V3 - Jscrambler, acessado em abril 28, 2025, https://jscrambler.com/blog/implementing-google-recaptcha-v3
+            78. Webhooks for Leads - Meta for Developers, acessado em abril 28, 2025, https://developers.facebook.com/docs/graph-api/webhooks/getting-started/webhooks-for-leadgen/
+            79. Send API - Messenger Platform - Meta for Developers - Facebook, acessado em abril 28, 2025, https://developers.facebook.com/docs/messenger-platform/reference/send-api/
+            80. Overview - Cloud API - Meta for Developers - Facebook, acessado em abril 28, 2025, https://developers.facebook.com/docs/whatsapp/cloud-api/overview/
+            81. WhatsApp Business Cloud - Apps Documentation, acessado em abril 28, 2025, https://apps.make.com/whatsapp-business-cloud
+            82. How AI-Powered EdTech CRM Software Revolutionizes Student Engagement and Enrollment - Meritto, acessado em abril 28, 2025, https://www.meritto.com/blog/how-ai-powered-edtech-crm-software-revolutionizes-student-engagement-and-enrollment/
+            83. How to Integrate AI Voice Calling into EdTech CRM? - Tabbly, acessado em abril 28, 2025, https://www.tabbly.io/blogs/the-best-edtech-crm-in-2024
+            84. White label - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/about-white-label
+            85. White label - Asaas - Documentação API, acessado em abril 28, 2025, https://docs.asaas.com/docs/white-label
+            86. Create payment links with Connect - Stripe Documentation, acessado em abril 28, 2025, https://docs.stripe.com/connect/payment-links
+            87. Best Payment Processing Software for Mid Size Business - Page 16, acessado em abril 28, 2025, https://slashdot.org/software/payment-processing/f-mid-size-business/?page=16
+            88. iugu/iugu-python - GitHub, acessado em abril 28, 2025, https://github.com/iugu/iugu-python
+            89. Module: Iugu — Documentation for iugu (1.0.8) - RubyDoc.info, acessado em abril 28, 2025, https://www.rubydoc.info/gems/iugu/Iugu
+            90. tiagopog/iugu-elixir: Elixir client for the Iugu's API - GitHub, acessado em abril 28, 2025, https://github.com/tiagopog/iugu-elixir
+            91. AI in EdTech: Innovations Reshaping Modern Education - Litslink, acessado em abril 28, 2025, https://litslink.com/blog/ai-in-edtech
+            92. Retrieval Augmented Generation (RAG) with 100k PDFs?! Too slow! - Community, acessado em abril 28, 2025, https://community.openai.com/t/retrieval-augmented-generation-rag-with-100k-pdfs-too-slow/657217

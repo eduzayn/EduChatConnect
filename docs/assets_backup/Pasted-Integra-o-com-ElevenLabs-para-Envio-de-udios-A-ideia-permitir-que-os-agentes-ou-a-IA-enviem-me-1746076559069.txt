@@ -1,0 +1,43 @@
+Integração com ElevenLabs para Envio de Áudios
+A ideia é permitir que os agentes (ou a IA) enviem mensagens de áudio sintetizadas a partir de texto através dos canais suportados.
+
+Backend (Node.js/Fastify):
+
+Novo Serviço (ElevenLabsService):
+Crie um novo módulo/serviço no backend Node.js.
+Este serviço será responsável por interagir com a API do ElevenLabs. Ele precisará de uma função que receba texto e configurações de voz (opcional) e retorne o arquivo/dados de áudio gerado.
+Ele utilizará a chave de API do ElevenLabs, que deve ser armazenada de forma segura (ex: via Replit Secrets ).   
+Modificação do Fluxo de Envio de Mensagens:
+Quando a API POST /messages  receber uma requisição para enviar uma mensagem com contentType definido como AUDIO:
+O backend primeiro chamará o ElevenLabsService com o texto da mensagem.
+Após receber o áudio gerado pelo ElevenLabs, o backend passará este áudio (ou um link para ele, se aplicável) para o ChannelAdapter correspondente.   
+  
+Adaptação dos ChannelAdapters:
+Os adaptadores para canais que suportam áudio (como WhatsApp via Twilio ) precisarão ser atualizados.   
+Eles devem ser capazes de receber dados/link de áudio e enviá-los usando a funcionalidade específica da API do canal (ex: o parâmetro mediaUrl da API de mensagens da Twilio ).   
+Frontend (React/Vite):
+
+Interface do Agente (InputArea):
+Adicione um controle na InputArea  (ex: um botão "Enviar como Áudio" ou um seletor de tipo de mensagem) que permita ao agente escolher enviar o texto digitado como uma mensagem de áudio.   
+Comunicação com Backend:
+Quando o agente optar por enviar como áudio, o frontend ainda enviará a requisição para POST /messages, mas incluirá o texto original e um parâmetro indicando que o contentType desejado é AUDIO.
+Banco de Dados (PostgreSQL/Neon com Prisma):
+
+Modelo Message:
+O enum ContentType já inclui AUDIO, o que é adequado.   
+O campo content  pode armazenar o texto original que foi usado para gerar o áudio.   
+Pode ser útil adicionar um novo campo, como mediaUrl (String, opcional), para armazenar o link do áudio gerado, especialmente se o áudio for hospedado temporariamente antes de ser enviado pelo canal.
+Configuração:
+
+Chave de API: Armazene a chave de API do ElevenLabs de forma segura usando Replit Secrets.   
+Configurações de Voz: Adicione opções na seção de configurações do sistema  (potencialmente por tenant, se aplicável ) para definir configurações padrão do ElevenLabs, como a voz a ser usada, modelo, configurações de estabilidade, etc.   
+Fluxo de Trabalho Resumido:
+
+Agente digita texto e seleciona "Enviar como Áudio" (Frontend).
+Frontend envia texto e contentType: AUDIO para POST /messages (Backend).
+Backend chama ElevenLabsService para gerar áudio a partir do texto.
+ElevenLabsService retorna dados/link do áudio para o backend.
+Backend passa o áudio para o ChannelAdapter apropriado.
+ChannelAdapter envia o áudio pela API do canal externo (ex: Twilio).
+Backend salva o registro da mensagem com contentType: AUDIO.
+Essa integração permitirá adicionar a funcionalidade de envio de áudio sintetizado ao seu sistema Omnichannel.
