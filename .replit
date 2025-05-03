@@ -1,3 +1,4 @@
+
 modules = ["nodejs-20"]
 
 [[ports]]
@@ -6,4 +7,21 @@ externalPort = 80
 
 [deployment]
 run = ["sh", "-c", "node index.js"]
-build = ["sh", "-c", "npx tsc --project tsconfig.node.json"]
+build = ["sh", "-c", "npm run build"]
+deploymentTarget = "cloud_run"
+ignorePorts = false
+
+[env]
+NODE_ENV = "production"
+
+[workflows]
+runButton = "Run Server"
+
+[[workflows.workflow]]
+name = "Run Server"
+author = 41339238
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=production node index.js"

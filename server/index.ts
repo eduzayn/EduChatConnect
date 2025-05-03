@@ -10,7 +10,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { setupRoutes } from './routes';
+import { setupRoutes } from './routes.js';
 import { memStorage } from './storage';
 
 // Cria uma instância do Express
@@ -25,7 +25,13 @@ const rootDir = path.resolve(__dirname, '..');
 const publicDir = path.join(rootDir, 'public');
 
 // Aplica patch DOM para corrigir problemas React
-import '../src/dom-patch.js';
+try {
+  import('../src/dom-patch.js').catch(err => {
+    console.log('DOM patch não carregado (esperado em produção):', err.message);
+  });
+} catch (err) {
+  console.log('DOM patch não disponível (esperado em produção)');
+}
 
 // Middleware para logs de requisições
 app.use((req, res, next) => {

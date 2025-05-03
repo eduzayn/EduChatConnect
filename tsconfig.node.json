@@ -1,16 +1,5 @@
+
 {
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
-    "strict": true
-  },
-  "include": ["vite.config.ts", "server/**/*.ts"]
-}
-{
-  "extends": "./tsconfig.json",
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
@@ -20,7 +9,10 @@
     "rootDir": "./",
     "skipLibCheck": true,
     "isolatedModules": true,
-    "noEmit": false
+    "noEmit": false,
+    "composite": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "src"]
