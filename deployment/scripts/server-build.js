@@ -1,4 +1,3 @@
-
 // Deployment build script (ES Modules compatible)
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -17,21 +16,24 @@ try {
     fs.mkdirSync(distDir, { recursive: true });
     console.log('✓ Created dist directory');
   }
-  
+
   // Install TypeScript explicitly first
   console.log('Installing TypeScript...');
   execSync('npm install --no-save typescript', { stdio: 'inherit' });
-  
+
   // Run TypeScript compilation with explicit project file
   console.log('Compiling TypeScript...');
+  console.log('Installing TypeScript compiler...');
+  execSync('npm install --save-dev typescript', { stdio: 'inherit' });
+  console.log('Running TypeScript compilation...');
   execSync('npx tsc --project tsconfig.node.json', { stdio: 'inherit' });
-  
+
   // Create a basic HTML file if needed
   const publicDir = path.resolve(process.cwd(), 'public');
   if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir, { recursive: true });
   }
-  
+
   if (!fs.existsSync(path.join(publicDir, 'index.html'))) {
     const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -47,11 +49,11 @@ try {
   </div>
 </body>
 </html>`;
-    
+
     fs.writeFileSync(path.join(publicDir, 'index.html'), htmlContent);
     console.log('✓ Created index.html');
   }
-  
+
   console.log('Build completed successfully!');
 } catch (error) {
   console.error('Build failed:', error);
