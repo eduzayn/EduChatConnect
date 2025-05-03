@@ -1,210 +1,178 @@
 /**
- * Middleware para Monitoramento de Performance
+ * Middleware para monitoramento de performance da aplicação
  * 
- * Este módulo implementa o monitoramento de performance da aplicação,
- * registrando tempos de resposta, uso de memória e outros indicadores
- * de performance críticos para identificar gargalos.
+ * Este middleware monitora e registra métricas de performance da aplicação,
+ * incluindo uso de memória, tempo de CPU e tempo de resposta das requisições.
  */
 
 import { Request, Response, NextFunction } from 'express';
-import createLogger from '../utils/logger';
+import { log } from '../utils/logger';
+import os from 'os';
 
-const logger = createLogger('performance');
+// Intervalo para coleta de métricas em milissegundos
+const METRICS_INTERVAL = 60000; // 1 minuto
 
-// Métricas de performance global
-const performanceMetrics = {
-  // Contador de requisições
-  requestCount: 0,
-  
-  // Tempo de resposta
-  responseTimeMs: {
-    total: 0,
-    avg: 0,
-    min: Number.MAX_SAFE_INTEGER,
-    max: 0,
-    // Buckets para histograma (em ms): 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000+
-    histogram: [0, 0, 0, 0, 0, 0, 0, 0, 0]
-  },
-  
-  // Códigos de status HTTP
-  statusCodes: {} as Record<number, number>,
-  
-  // Rotas mais lentas (top 10)
-  slowestRoutes: [] as Array<{
-    method: string,
-    path: string,
-    timeMs: number,
-    timestamp: Date
-  }>,
-  
-  // Processos em andamento
-  activeRequests: 0,
-  
-  // Tempo de vida do servidor
-  startTime: Date.now(),
-  
-  // Último uso de memória registrado
-  lastMemoryUsage: {
-    rss: 0,
-    heapTotal: 0,
-    heapUsed: 0,
-    external: 0,
-    timestamp: new Date()
-  }
+// Último momento em que as métricas foram coletadas
+let lastMetricsTime = 0;
+
+// Threshold para requisições lentas (em ms)
+const SLOW_REQUEST_THRESHOLD = 1000; // 1 segundo
+
+// Dados de memória da última coleta
+let lastMemoryUsage = {
+  rss: 0,
+  heapTotal: 0,
+  heapUsed: 0,
+  external: 0
 };
 
 /**
- * Atualiza o histograma de tempo de resposta
+ * Coleta e registra métricas do sistema e da aplicação
  */
-function updateHistogram(timeMs: number): void {
-  const thresholds = [10, 50, 100, 250, 500, 1000, 2500, 5000];
-  
-  for (let i = 0; i < thresholds.length; i++) {
-    if (timeMs <= thresholds[i]) {
-      performanceMetrics.responseTimeMs.histogram[i]++;
-      return;
+function collectMetrics() {
+  const now = Date.now();
+
+  // Evitar coleta muito frequente
+  if (now - lastMetricsTime < METRICS_INTERVAL) {
+    return;
+  }
+
+  lastMetricsTime = now;
+
+  try {
+    // Coletar métricas da memória
+    const memoryUsage = process.memoryUsage();
+    
+    // Calcular diferenças desde a última coleta
+    const memDiff = {
+      rss: memoryUsage.rss - lastMemoryUsage.rss,
+      heapTotal: memoryUsage.heapTotal - lastMemoryUsage.heapTotal,
+      heapUsed: memoryUsage.heapUsed - lastMemoryUsage.heapUsed,
+      external: memoryUsage.external - lastMemoryUsage.external
+    };
+    
+    // Atualizar valores para próxima comparação
+    lastMemoryUsage = memoryUsage;
+    
+    // Coletar métricas de CPU
+    const cpuUsage = process.cpuUsage();
+    const cpuCount = os.cpus().length;
+    const loadAvg = os.loadavg();
+    
+    // Registrar métricas no log
+    log(
+      `Memória: ${formatBytes(memoryUsage.rss)} RSS, ${formatBytes(memoryUsage.heapUsed)}/${formatBytes(memoryUsage.heapTotal)} Heap`,
+      'performance'
+    );
+    
+    log(
+      `CPU: Load ${loadAvg[0].toFixed(2)}/${cpuCount}, Uptime: ${formatUptime(os.uptime())}`,
+      'performance'
+    );
+    
+    // Alertar sobre potenciais problemas de memória
+    if (memDiff.heapUsed > 50 * 1024 * 1024) { // Se cresceu mais de 50MB desde a última coleta
+      log(
+        `Alerta: Crescimento rápido de memória heap: +${formatBytes(memDiff.heapUsed)} em ${METRICS_INTERVAL/1000}s`,
+        'performance',
+        'warn'
+      );
     }
-  }
-  
-  // Se chegou aqui, é maior que o último threshold
-  performanceMetrics.responseTimeMs.histogram[thresholds.length]++;
-}
-
-/**
- * Atualiza a lista de rotas mais lentas
- */
-function updateSlowestRoutes(method: string, path: string, timeMs: number): void {
-  // Adiciona à lista
-  performanceMetrics.slowestRoutes.push({
-    method,
-    path,
-    timeMs,
-    timestamp: new Date()
-  });
-  
-  // Ordena por tempo (decrescente)
-  performanceMetrics.slowestRoutes.sort((a, b) => b.timeMs - a.timeMs);
-  
-  // Mantém apenas as 10 mais lentas
-  if (performanceMetrics.slowestRoutes.length > 10) {
-    performanceMetrics.slowestRoutes.pop();
+    
+    // Verificar se a memória está em níveis críticos (acima de 80% do máximo configurado)
+    const v8 = require('v8');
+    const heapStats = v8.getHeapStatistics();
+    const heapUsedPercentage = (memoryUsage.heapUsed / heapStats.heap_size_limit) * 100;
+    
+    if (heapUsedPercentage > 80) {
+      log(
+        `Alerta: Uso crítico de memória heap: ${heapUsedPercentage.toFixed(1)}% do limite (${formatBytes(heapStats.heap_size_limit)})`,
+        'performance',
+        'error'
+      );
+      
+      // Forçar coleta de lixo se estiver realmente crítico
+      if (heapUsedPercentage > 90 && global.gc) {
+        log('Iniciando coleta de lixo forçada...', 'performance', 'warn');
+        global.gc();
+      }
+    }
+  } catch (error) {
+    log(`Erro ao coletar métricas: ${error}`, 'performance', 'error');
   }
 }
 
 /**
- * Atualiza as estatísticas de uso de memória
+ * Formata bytes para uma string legível (KB, MB, GB)
  */
-function updateMemoryUsage(): void {
-  const memoryUsage = process.memoryUsage();
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
   
-  performanceMetrics.lastMemoryUsage = {
-    rss: memoryUsage.rss,
-    heapTotal: memoryUsage.heapTotal,
-    heapUsed: memoryUsage.heapUsed,
-    external: memoryUsage.external,
-    timestamp: new Date()
-  };
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * Formata tempo de atividade em formato legível
+ */
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  seconds %= 86400;
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  seconds = Math.floor(seconds % 60);
+  
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+  
+  return parts.join(' ');
 }
 
 /**
  * Middleware para monitoramento de performance
  */
-export default function performanceMonitorMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const startTime = process.hrtime();
-  const method = req.method;
-  const path = req.path;
+export function performanceMonitorMiddleware(req: Request, res: Response, next: NextFunction) {
+  // Registrar o horário de início da requisição
+  const startTime = Date.now();
   
-  // Incrementa contador de requisições ativas
-  performanceMetrics.activeRequests++;
+  // Registrar memória no início da requisição
+  const startMemory = process.memoryUsage().heapUsed;
   
-  // Intercepta o método end para medir tempo de resposta
-  const originalEnd = res.end;
-  
-  // @ts-ignore - Tipos complexos na sobreposição do método end
-  res.end = function(chunk?: any, encoding?: BufferEncoding, callback?: () => void) {
-    // Calcula o tempo de resposta
-    const [seconds, nanoseconds] = process.hrtime(startTime);
-    const responseTimeMs = seconds * 1000 + nanoseconds / 1000000;
+  // Monitorar fim da requisição
+  res.on('finish', () => {
+    // Calcular tempo de resposta
+    const responseTime = Date.now() - startTime;
     
-    // Atualiza métricas
-    performanceMetrics.requestCount++;
-    performanceMetrics.responseTimeMs.total += responseTimeMs;
-    performanceMetrics.responseTimeMs.avg = 
-      performanceMetrics.responseTimeMs.total / performanceMetrics.requestCount;
-    performanceMetrics.responseTimeMs.min = 
-      Math.min(performanceMetrics.responseTimeMs.min, responseTimeMs);
-    performanceMetrics.responseTimeMs.max = 
-      Math.max(performanceMetrics.responseTimeMs.max, responseTimeMs);
+    // Calcular uso de memória
+    const memoryDiff = process.memoryUsage().heapUsed - startMemory;
     
-    // Atualiza histograma
-    updateHistogram(responseTimeMs);
-    
-    // Registra código de status
-    const statusCode = res.statusCode;
-    performanceMetrics.statusCodes[statusCode] = 
-      (performanceMetrics.statusCodes[statusCode] || 0) + 1;
-    
-    // Verifica se é uma das requisições mais lentas
-    if (responseTimeMs > 500) {
-      updateSlowestRoutes(method, path, responseTimeMs);
-      
-      // Log de requisição lenta
-      logger.warn(`Requisição lenta: ${method} ${path} (${responseTimeMs.toFixed(2)}ms)`, {
-        method,
-        path,
-        statusCode,
-        responseTimeMs,
-        query: req.query,
-        params: req.params
-      });
+    // Registrar métricas detalhadas apenas para requisições lentas
+    if (responseTime > SLOW_REQUEST_THRESHOLD) {
+      log(
+        `Requisição lenta: ${req.method} ${req.url} - ${responseTime}ms, +${formatBytes(memoryDiff)} memória`,
+        'performance',
+        'warn'
+      );
     }
     
-    // Decrementa contador de requisições ativas
-    performanceMetrics.activeRequests--;
-    
-    // Chama o método original
-    return originalEnd.call(this, chunk, encoding, callback);
-  };
+    // Coletar métricas gerais periodicamente
+    collectMetrics();
+  });
   
   next();
 }
 
-/**
- * Inicia o monitoramento periódico de métricas de performance
- */
-export function initPerformanceMonitoring(interval = 60000): void {
-  // Atualiza uso de memória inicial
-  updateMemoryUsage();
-  
-  // Configuração de monitoramento periódico
-  setInterval(() => {
-    // Atualiza uso de memória
-    updateMemoryUsage();
-    
-    // Calcula métricas adicionais
-    const uptime = Math.floor((Date.now() - performanceMetrics.startTime) / 1000);
-    const requestsPerSecond = performanceMetrics.requestCount / uptime;
-    
-    // Gera log periódico de métricas
-    logger.info(`Métricas de performance (uptime: ${uptime}s)`, {
-      uptime,
-      requestCount: performanceMetrics.requestCount,
-      activeRequests: performanceMetrics.activeRequests,
-      requestsPerSecond: requestsPerSecond.toFixed(2),
-      avgResponseTime: performanceMetrics.responseTimeMs.avg.toFixed(2),
-      minResponseTime: performanceMetrics.responseTimeMs.min,
-      maxResponseTime: performanceMetrics.responseTimeMs.max,
-      memoryUsage: {
-        rss: (performanceMetrics.lastMemoryUsage.rss / 1024 / 1024).toFixed(2) + ' MB',
-        heapTotal: (performanceMetrics.lastMemoryUsage.heapTotal / 1024 / 1024).toFixed(2) + ' MB',
-        heapUsed: (performanceMetrics.lastMemoryUsage.heapUsed / 1024 / 1024).toFixed(2) + ' MB'
-      },
-      statusCodes: performanceMetrics.statusCodes
-    });
-    
-  }, interval);
-  
-  logger.info('Monitoramento de performance iniciado');
-}
+// Coletar métricas iniciais
+collectMetrics();
 
-export { performanceMetrics };
+// Agendar coleta periódica de métricas (a cada minuto)
+setInterval(collectMetrics, METRICS_INTERVAL);
+
+export default performanceMonitorMiddleware;

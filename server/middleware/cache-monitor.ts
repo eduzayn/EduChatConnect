@@ -1,122 +1,204 @@
 /**
- * Middleware para monitoramento e controle de cache
+ * Middleware para monitoramento e controle do cache da aplicação
  * 
- * Este middleware adiciona rotas para monitorar o uso do cache
- * e fornece endpoints para gerenciamento manual do cache.
+ * Este middleware fornece endpoints para visualizar, limpar e gerenciar
+ * o cache da aplicação, expondo estatísticas e funcionalidades de manutenção.
  */
 
-import { Express, Request, Response, NextFunction } from 'express';
-import cacheService from '../utils/cache-service';
-import createLogger from '../utils/logger';
-
-const logger = createLogger('cache-monitor');
+import { Request, Response, NextFunction } from 'express';
+import { cacheService, CacheStats } from '../utils/cache-service';
+import { log } from '../utils/logger';
 
 /**
- * Configura o middleware de monitoramento de cache
- * @param app Instância do Express
+ * Endpoint para listar estatísticas do cache
  */
-export function setupCacheMonitor(app: Express): void {
-  // Rota para obter estatísticas de cache
-  app.get('/api/admin/cache/stats', isAdmin, (req, res) => {
+export function getCacheStats(req: Request, res: Response) {
+  try {
     const stats = cacheService.getStats();
-    res.json({
-      stats,
-      hitRate: calculateHitRate(stats.hits, stats.misses)
-    });
-  });
-  
-  // Rota para limpar todo o cache
-  app.post('/api/admin/cache/flush', isAdmin, (req, res) => {
-    cacheService.flush();
-    logger.info('Cache foi limpo manualmente', { 
-      userId: (req.user as any)?.id, 
-      username: (req.user as any)?.username 
-    });
-    res.json({ success: true, message: 'Cache limpo com sucesso' });
-  });
-  
-  // Rota para limpar um namespace específico
-  app.post('/api/admin/cache/namespace/:namespace/clear', isAdmin, (req, res) => {
-    const namespace = req.params.namespace;
     
-    if (!namespace) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'É necessário especificar um namespace' 
-      });
-    }
-    
-    cacheService.clearNamespace(namespace);
-    logger.info(`Namespace ${namespace} foi limpo manualmente`, { 
-      userId: (req.user as any)?.id, 
-      username: (req.user as any)?.username 
-    });
+    // Adicionar informações formatadas para melhor legibilidade
+    const enhancedStats = {
+      ...stats,
+      hitRatio: stats.hits + stats.misses > 0 
+        ? ((stats.hits / (stats.hits + stats.misses)) * 100).toFixed(2) + '%' 
+        : '0%',
+      sizeFormatted: formatBytes(stats.size),
+      createdFormatted: stats.created.toISOString(),
+      lastClearFormatted: stats.lastClear ? stats.lastClear.toISOString() : 'Nunca',
+      uptime: formatDuration(Date.now() - stats.created.getTime())
+    };
     
     res.json({ 
       success: true, 
-      message: `Namespace ${namespace} limpo com sucesso` 
+      stats: enhancedStats 
     });
-  });
-  
-  // Middleware de log para registrar tempos de resposta
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    // Apenas registramos para rotas de API
-    if (!req.path.startsWith('/api/')) {
-      return next();
-    }
-    
-    const start = Date.now();
-    
-    // Capturamos o status da resposta
-    const originalEnd = res.end;
-    res.end = function(...args: any[]) {
-      const duration = Date.now() - start;
-      
-      // Log apenas para respostas lentas (>500ms)
-      if (duration > 500) {
-        logger.warn(`Resposta lenta em ${req.method} ${req.path}: ${duration}ms`, {
-          method: req.method,
-          path: req.path,
-          statusCode: res.statusCode,
-          durationMs: duration
-        });
-      }
-      
-      return originalEnd.apply(res, args);
-    };
-    
-    next();
-  });
-  
-  logger.info('Middleware de monitoramento de cache configurado');
+  } catch (error) {
+    log(`Erro ao obter estatísticas do cache: ${error}`, 'cache-monitor', 'error');
+    res.status(500).json({ 
+      success: false, 
+      error: `Erro ao obter estatísticas: ${error}` 
+    });
+  }
 }
 
 /**
- * Middleware para verificar se o usuário é administrador
+ * Endpoint para limpar o cache
  */
-function isAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: 'Não autorizado' });
+export function clearCache(req: Request, res: Response) {
+  try {
+    // Estatísticas antes de limpar
+    const statsBefore = cacheService.getStats();
+    
+    // Limpar cache
+    cacheService.clear();
+    
+    log(`Cache limpo manualmente pelo usuário. ${statsBefore.keys} itens removidos.`, 'cache-monitor');
+    
+    res.json({ 
+      success: true, 
+      message: `Cache limpo com sucesso. ${statsBefore.keys} itens removidos.` 
+    });
+  } catch (error) {
+    log(`Erro ao limpar cache: ${error}`, 'cache-monitor', 'error');
+    res.status(500).json({ 
+      success: false, 
+      error: `Erro ao limpar cache: ${error}` 
+    });
+  }
+}
+
+/**
+ * Endpoint para remover itens expirados do cache
+ */
+export function cleanExpiredCache(req: Request, res: Response) {
+  try {
+    const removed = cacheService.cleanExpired();
+    
+    log(`Limpeza manual de itens expirados do cache: ${removed} itens removidos.`, 'cache-monitor');
+    
+    res.json({ 
+      success: true, 
+      message: `${removed} itens expirados removidos do cache.` 
+    });
+  } catch (error) {
+    log(`Erro ao limpar itens expirados: ${error}`, 'cache-monitor', 'error');
+    res.status(500).json({ 
+      success: false, 
+      error: `Erro ao limpar itens expirados: ${error}` 
+    });
+  }
+}
+
+/**
+ * Endpoint para obter um item específico do cache (com verificação de segurança)
+ */
+export function getCacheItem(req: Request, res: Response) {
+  const { key } = req.params;
+  
+  if (!key) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Chave não fornecida' 
+    });
   }
   
-  const user = req.user as any;
-  
-  if (user.role !== 'admin') {
-    return res.status(403).json({ message: 'Permissão negada' });
+  try {
+    const value = cacheService.get(key);
+    
+    if (value === undefined) {
+      return res.status(404).json({
+        success: false,
+        error: 'Item não encontrado no cache'
+      });
+    }
+    
+    // Ocultar informações sensíveis
+    // (esto serviria apenas para verificações técnicas, não expondo dados sensíveis)
+    const isSensitive = key.toLowerCase().includes('token') || 
+                        key.toLowerCase().includes('password') ||
+                        key.toLowerCase().includes('secret') ||
+                        key.toLowerCase().includes('key');
+    
+    return res.json({
+      success: true,
+      key,
+      value: isSensitive ? '*** VALOR SENSÍVEL OCULTADO ***' : value,
+      type: typeof value
+    });
+  } catch (error) {
+    log(`Erro ao obter item do cache: ${error}`, 'cache-monitor', 'error');
+    return res.status(500).json({ 
+      success: false, 
+      error: `Erro ao obter item do cache: ${error}` 
+    });
+  }
+}
+
+/**
+ * Middleware para adicionar rotas de cache à aplicação
+ */
+export function cacheMonitorMiddleware(req: Request, res: Response, next: NextFunction) {
+  // Adicionar rotas específicas para gerenciamento de cache apenas no ambiente de desenvolvimento
+  if (process.env.NODE_ENV !== 'production' && req.path.startsWith('/api/admin/cache')) {
+    const route = req.path.replace('/api/admin/cache', '');
+    
+    // Estatísticas do cache
+    if (route === '/stats' && req.method === 'GET') {
+      return getCacheStats(req, res);
+    }
+    
+    // Limpar cache
+    if (route === '/clear' && req.method === 'POST') {
+      return clearCache(req, res);
+    }
+    
+    // Limpar itens expirados
+    if (route === '/clean-expired' && req.method === 'POST') {
+      return cleanExpiredCache(req, res);
+    }
+    
+    // Obter item específico
+    if (route.startsWith('/item/') && req.method === 'GET') {
+      req.params.key = route.replace('/item/', '');
+      return getCacheItem(req, res);
+    }
   }
   
+  // Se não for uma rota de cache, continuar com a execução normal
   next();
 }
 
 /**
- * Calcula a taxa de acerto (hit rate) do cache
+ * Formata bytes para uma string legível (KB, MB, GB)
  */
-function calculateHitRate(hits: number, misses: number): string {
-  const total = hits + misses;
-  if (total === 0) return '0.00%';
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
   
-  const rate = (hits / total) * 100;
-  return `${rate.toFixed(2)}%`;
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export default setupCacheMonitor;
+/**
+ * Formata duração em formato legível
+ */
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) {
+    return `${days}d ${hours % 24}h`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+export default cacheMonitorMiddleware;

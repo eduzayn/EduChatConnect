@@ -49,10 +49,10 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
   };
   
   // Sobrescrever métodos para capturar o envio da resposta
-  res.end = function(chunk?: any, encoding?: BufferEncoding, callback?: () => void): Response {
+  res.end = function(...args: any[]): any {
     logResponse();
-    return originalEnd.call(this, chunk, encoding, callback);
-  };
+    return originalEnd.apply(this, args);
+  } as any;
   
   res.json = function(body?: any): Response {
     logResponse();
