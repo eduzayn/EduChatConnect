@@ -10,14 +10,18 @@ const __dirname = path.dirname(__filename);
 console.log('Starting build process...');
 
 try {
+  // Ensure TypeScript is installed
+  console.log('Installing TypeScript dependency...');
+  execSync('npm install --no-save typescript', { stdio: 'inherit' });
+  
   // Create dist directory if it doesn't exist
   if (!fs.existsSync('dist')) {
     fs.mkdirSync('dist', { recursive: true });
   }
 
-  // Run TypeScript compilation
+  // Run TypeScript compilation with path to local tsc
   console.log('Compiling TypeScript...');
-  execSync('npx tsc', { stdio: 'inherit' });
+  execSync('npx --no-install tsc', { stdio: 'inherit' });
 
   // Copy necessary files
   console.log('Copying static files...');
