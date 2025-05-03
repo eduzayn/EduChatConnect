@@ -18,9 +18,13 @@ try {
     console.log('✓ Created dist directory');
   }
   
-  // Run TypeScript compilation
+  // Install TypeScript explicitly first
+  console.log('Installing TypeScript...');
+  execSync('npm install --no-save typescript', { stdio: 'inherit' });
+  
+  // Run TypeScript compilation with explicit project file
   console.log('Compiling TypeScript...');
-  execSync('npx tsc', { stdio: 'inherit' });
+  execSync('npx tsc --project tsconfig.node.json', { stdio: 'inherit' });
   
   // Create a basic HTML file if needed
   const publicDir = path.resolve(process.cwd(), 'public');
