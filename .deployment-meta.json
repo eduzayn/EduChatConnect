@@ -1,0 +1,8 @@
+{
+  "name": "EduChatConnect",
+  "description": "Plataforma de chat educacional com suporte a múltiplos canais e IA",
+  "language": "nodejs",
+  "environment": "web",
+  "entryPoint": "deploy-replit.js",
+  "ports": [3000]
+}

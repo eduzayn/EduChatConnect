@@ -1,0 +1,22 @@
+Console.js:61 The above error occurred in the <TabsContent> component:
+
+    at https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…orkspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=41b93ad8:173:13
+    at _c5 (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit.dev/src/components/ui/tabs.tsx:72:12)
+    at div
+    at div
+    at div
+    at div
+    at AppShell (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit.dev/src/components/layout/app-shell.tsx:23:28)
+    at WebhookQueuePage (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit.dev/src/pages/webhook-queue-page.tsx:46:21)
+    at Route (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=41b93ad8:323:16)
+    at ProtectedRoute (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit.dev/src/lib/protected-route.tsx:22:3)
+    at Switch (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=41b93ad8:379:17)
+    at Router
+    at Provider (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…unner/workspace/node_modules/.vite/deps/chunk-5AJU3CG7.js?v=41b93ad8:38:15)
+    at TooltipProvider (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…rkspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=41b93ad8:61:5)
+    at AuthProvider (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit.dev/src/hooks/use-auth.tsx:39:32)
+    at QueryClientProvider (https://4044431c-9427-4b37-9392-6de6942714bd-00-yivuujxlosi3.janeway.replit…rkspace/node_modules/.vite/deps/@tanstack_react-query.js?v=41b93ad8:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.

@@ -1,0 +1,46 @@
+Adição de um Módulo de IA ao Sistema Omnichannel
+A arquitetura existente, com Frontend em React/Vite, Backend em Node.js/Fastify, e banco de dados Neon/PostgreSQL com Prisma, fornece uma base sólida para integrar um módulo de IA.   
+
+1. Base de Treinamento de IA Robusta:
+
+Interface de Alimentação (Frontend):
+Crie uma nova seção na área administrativa/configurações do sistema (desenvolvida em React/Vite ).   
+Esta interface deve permitir aos administradores:
+Fazer upload de arquivos (PDF, TXT, Excel).
+Inserir links de sites e artigos.
+Gerenciar uma base de perguntas e respostas (Q&A).
+Esta interface seria conceitualmente similar à proposta para "Gerenciamento de Categorias de Interação".   
+Processamento e Armazenamento (Backend):
+Desenvolva endpoints na API Node.js/Fastify  para receber os dados da interface de alimentação.   
+Implemente lógica para:
+Extrair texto de PDFs e outros formatos de arquivo.
+Buscar e processar conteúdo de links web.
+Validar e estruturar os dados de Q&A.
+Armazene os dados processados no banco de dados PostgreSQL/Neon. Pode ser necessário criar novas tabelas (ex: AiTrainingDataSource, AiKnowledgeChunk) gerenciadas via Prisma. Se for utilizar busca por similaridade semântica, pode ser necessário armazenar embeddings vetoriais, o que pode requerer extensões PostgreSQL ou um banco de dados vetorial dedicado.   
+Treinamento/Finetuning:
+Integre com um serviço ou modelo de IA (não especificado na stack atual, mas necessário para a funcionalidade).   
+Use os dados armazenados para treinar ou fazer finetuning do modelo escolhido, ou para fornecer contexto em tempo real para as respostas (Retrieval-Augmented Generation - RAG).
+2. Conexão Omnichannel e Respostas Autônomas:
+
+Ponto de Intercepção: Modifique a lógica de recebimento de mensagens no backend (WebhookProcessor ) para que, antes de uma mensagem ir para a caixa de entrada unificada, ela seja primeiro avaliada pelo módulo de IA.   
+Consulta à IA: O backend consulta o modelo de IA treinado, passando o conteúdo da mensagem do aluno e o contexto da conversa (histórico de mensagens da Conversation ).   
+Geração e Envio de Resposta:
+Se a IA determinar que pode responder, ela gera a resposta.
+O backend envia essa resposta de volta ao aluno através do respectivo ChannelAdapter (Twilio, Meta, etc.).   
+Seria útil adaptar o modelo Message  para indicar que a mensagem foi enviada pela IA (talvez estendendo o enum SenderType ).   
+3. Análise de Sentimento e Transferência para Atendimento Humano:
+
+Ferramenta de Sentimento: Integre uma biblioteca ou API de análise de sentimento no backend Node.js.   
+Lógica de Decisão:
+Antes de enviar uma resposta da IA, ou se a IA não puder responder confiavelmente, analise o sentimento da(s) última(s) mensagem(ns) do aluno.
+Defina um limiar de sentimento (configurável). Se o sentimento for negativo (abaixo do limiar) OU se a IA explicitamente solicitar ajuda humana:
+A conversa deve ser encaminhada para a caixa de entrada unificada  para um agente humano.   
+Idealmente, a conversa deve ser marcada com um indicador de prioridade ou com a informação de sentimento negativo visível para o agente.
+Esta lógica expandiria as capacidades de roteamento básico.   
+4. Integração com Sistemas Existentes:
+
+Modularidade: Desenvolva o módulo de IA como um conjunto de plugins Fastify ou serviços distintos, seguindo a abordagem modular do sistema.   
+API: Estenda a API REST existente  com endpoints para gerenciar fontes de treinamento, configurações da IA e, potencialmente, para expor funcionalidades da IA a outros sistemas internos.   
+Banco de Dados: Crie as novas tabelas necessárias no schema PostgreSQL/Neon gerenciado pelo Prisma, garantindo a consistência com o design existente.   
+Multi-Tenancy: Se o sistema for multi-tenant, é crucial que toda a lógica da IA (treinamento, dados, respostas, configurações, análise de sentimento) seja estritamente isolada por tenant. A coluna tenantId deve ser adicionada às novas tabelas, e o filtro automático por tenantId (via middleware Prisma ) deve ser aplicado a todas as operações.   
+Ao implementar essas sugestões, você pode adicionar as capacidades de IA desejadas, aproveitando a arquitetura e as tecnologias já definidas no seu roteiro técnico.

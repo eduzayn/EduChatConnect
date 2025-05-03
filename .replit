@@ -1,0 +1,44 @@
+
+modules = ["nodejs-20"]
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[deployment]
+run = ["sh", "-c", "node index.js"]
+build = ["sh", "-c", "npm install && npx tsc --project tsconfig.node.json"]
+deploymentTarget = "cloud_run"
+ignorePorts = false
+
+[env]
+NODE_ENV = "production"
+
+[workflows]
+runButton = "Deploy Build and Run"
+
+[[workflows.workflow]]
+name = "Run Server"
+author = 41339238
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=production node index.js"
+
+[[workflows.workflow]]
+name = "Deploy Build and Run"
+author = 41339238
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm install"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run deploy:build"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=production node index.js"
